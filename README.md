@@ -2,7 +2,7 @@
 
 A free, always-on AI assistant that chats, searches and browses the web, generates and understands images, and writes and runs code — built by **Rohan Teja Nallapaneni**.
 
-**Live demo:** _deployed URL goes here after launch_
+**Live demo:** https://nrt-ai.rohan-nallapaneni.workers.dev
 
 ## What it does
 
