@@ -31,10 +31,21 @@ export default function Globe3D() {
 
       const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
+      // World group so the planet can sit beside the content on wide screens
+      const world = new THREE.Group();
+      scene.add(world);
+
       // Earth (axially tilted like the real one)
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
-      scene.add(globeGroup);
+      world.add(globeGroup);
+
+      const updateOffset = () => {
+        const wide = window.innerWidth >= 768;
+        world.position.x = wide ? 1.2 : 0;
+        world.position.y = wide ? 0 : -0.5;
+      };
+      updateOffset();
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
@@ -77,7 +88,7 @@ export default function Globe3D() {
           depthWrite: false,
         })
       );
-      scene.add(atmosphere);
+      world.add(atmosphere);
 
       // Starfield behind the globe
       const starCount = 700;
@@ -137,6 +148,7 @@ export default function Globe3D() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        updateOffset();
         if (reduced) renderer.render(scene, camera);
       };
       const onVisibility = () => {

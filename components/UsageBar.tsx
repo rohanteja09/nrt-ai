@@ -26,7 +26,7 @@ function Meter({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
+      <span className="text-[10px] font-semibold tabular-nums text-zinc-700 dark:text-zinc-300">
         {left}/{limit}
       </span>
     </div>
