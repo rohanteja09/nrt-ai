@@ -3,6 +3,7 @@ import { webSearch } from "./tools/webSearch";
 import { browsePage } from "./tools/browsePage";
 import { generateImage } from "./tools/generateImage";
 import { checkImageLimit } from "./rateLimit";
+import { isQuotaError } from "./quota";
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
@@ -233,7 +234,8 @@ export async function runAgent(
               imageUrl: dataUrl,
               status: "done",
             };
-          } catch {
+          } catch (err) {
+            if (isQuotaError(err)) throw err;
             output = "Image generation failed.";
             tc = {
               id: crypto.randomUUID(),

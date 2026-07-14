@@ -7,10 +7,13 @@ import SuggestionChips from "./SuggestionChips";
 import OrbitSpinner from "./OrbitSpinner";
 import type { ChatMessage, ToolCall } from "@/lib/types";
 
+import { QUOTA_EVENT } from "./StatusBadge";
+
 interface ChatApiResponse {
   text?: string;
   toolCalls?: ToolCall[];
   error?: string;
+  quotaExhausted?: boolean;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -77,6 +80,9 @@ export default function Chat() {
       const data: ChatApiResponse = await res.json();
       setAwaitingFirstToken(false);
 
+      if (data.quotaExhausted) {
+        window.dispatchEvent(new Event(QUOTA_EVENT));
+      }
       if (!res.ok || data.error) {
         const replyId = crypto.randomUUID();
         setMessages((m) => [

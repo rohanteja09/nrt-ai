@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { runAgent } from "@/lib/agent";
 import { checkChatLimit } from "@/lib/rateLimit";
+import { isQuotaError, markQuotaExhausted, QUOTA_MESSAGE } from "@/lib/quota";
 
 interface ChatRequestBody {
   messages?: { role: "user" | "assistant"; content: string }[];
@@ -36,6 +37,10 @@ export async function POST(req: Request) {
     return Response.json(result);
   } catch (err) {
     console.error(err);
+    if (isQuotaError(err)) {
+      await markQuotaExhausted(env.RATE_LIMIT_KV);
+      return Response.json({ error: QUOTA_MESSAGE, quotaExhausted: true }, { status: 503 });
+    }
     return Response.json({ error: "Something went wrong talking to the AI backend." }, { status: 500 });
   }
 }

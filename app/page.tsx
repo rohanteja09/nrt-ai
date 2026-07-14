@@ -1,5 +1,6 @@
 import Chat from "@/components/Chat";
 import Logo from "@/components/Logo";
+import StatusBadge from "@/components/StatusBadge";
 
 export default function Home() {
   return (
@@ -15,13 +16,7 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full border border-zinc-200/70 px-2.5 py-1 text-[11px] font-medium text-zinc-500 dark:border-zinc-800/70 dark:text-zinc-400">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            </span>
-            live
-          </span>
+          <StatusBadge />
         </div>
       </header>
       <Chat />
