@@ -123,6 +123,14 @@ body {
   100% { transform: translateX(100%); }
 }
 
+/* ---------- Animated footer hairline ---------- */
+.gradient-bar {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #3b82f6, #22d3ee, #3b82f6, transparent);
+  background-size: 200% 100%;
+  animation: gradient-shift 5s linear infinite;
+}
+
 /* ---------- Orbit spinner (logo + generic thinking state) ---------- */
 @keyframes orbit-spin {
   to { transform: rotate(360deg); }

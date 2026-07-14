@@ -8,6 +8,7 @@ import OrbitSpinner from "./OrbitSpinner";
 import type { ChatMessage, ToolCall } from "@/lib/types";
 
 import { QUOTA_EVENT } from "./StatusBadge";
+import { SUGGEST_EVENT } from "./Footer";
 import UsageBar from "./UsageBar";
 import LimitToast from "./LimitToast";
 import type { Usage } from "@/lib/rateLimit";
@@ -53,6 +54,16 @@ export default function Chat() {
       .then((r) => r.json() as Promise<{ usage?: Usage }>)
       .then((d) => d.usage && setUsage(d.usage))
       .catch(() => {});
+
+    const onSuggest = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (typeof text === "string") {
+        setInput(text);
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener(SUGGEST_EVENT, onSuggest);
+    return () => window.removeEventListener(SUGGEST_EVENT, onSuggest);
   }, []);
 
   function showToast(message: string) {
