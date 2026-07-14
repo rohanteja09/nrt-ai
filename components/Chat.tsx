@@ -8,12 +8,16 @@ import OrbitSpinner from "./OrbitSpinner";
 import type { ChatMessage, ToolCall } from "@/lib/types";
 
 import { QUOTA_EVENT } from "./StatusBadge";
+import UsageBar from "./UsageBar";
+import LimitToast from "./LimitToast";
+import type { Usage } from "@/lib/rateLimit";
 
 interface ChatApiResponse {
   text?: string;
   toolCalls?: ToolCall[];
   error?: string;
   quotaExhausted?: boolean;
+  usage?: Usage;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -32,12 +36,47 @@ export default function Chat() {
   const [focused, setFocused] = useState(false);
   const [lastAssistantId, setLastAssistantId] = useState<string | null>(null);
   const [attachedImage, setAttachedImage] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    fetch("/api/status")
+      .then((r) => r.json() as Promise<{ usage?: Usage }>)
+      .then((d) => d.usage && setUsage(d.usage))
+      .catch(() => {});
+  }, []);
+
+  function showToast(message: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }
+
+  function applyUsage(next: Usage) {
+    setUsage((prev) => {
+      if (next.chatsLeft <= 5 && (!prev || next.chatsLeft < prev.chatsLeft)) {
+        showToast(
+          next.chatsLeft === 0
+            ? "That was your last chat for today — resets tomorrow!"
+            : `Only ${next.chatsLeft} chat${next.chatsLeft === 1 ? "" : "s"} left today`
+        );
+      } else if (next.imagesLeft <= 5 && prev && next.imagesLeft < prev.imagesLeft) {
+        showToast(
+          next.imagesLeft === 0
+            ? "That was your last image generation for today — resets tomorrow!"
+            : `Only ${next.imagesLeft} image generation${next.imagesLeft === 1 ? "" : "s"} left today`
+        );
+      }
+      return next;
+    });
+  }
 
   function pickImage(file: File | undefined) {
     if (!file) return;
@@ -82,6 +121,9 @@ export default function Chat() {
 
       if (data.quotaExhausted) {
         window.dispatchEvent(new Event(QUOTA_EVENT));
+      }
+      if (data.usage) {
+        applyUsage(data.usage);
       }
       if (!res.ok || data.error) {
         const replyId = crypto.randomUUID();
@@ -169,7 +211,10 @@ export default function Chat() {
         </div>
       )}
 
+      <LimitToast message={toast} />
+
       <div className="sticky bottom-0 pb-4 pt-2">
+        <UsageBar usage={usage} />
         {attachedImage && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-950/80">
             <img src={attachedImage.previewUrl} alt="Attached" className="h-10 w-10 rounded-md object-cover" />
