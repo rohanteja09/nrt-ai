@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Footer from "@/components/Footer";
+import Globe3D from "@/components/Globe3D";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,9 +34,7 @@ export default function RootLayout({
           <div className="aurora-blob one" />
           <div className="aurora-blob two" />
         </div>
-        <div className="globe-wrap" aria-hidden="true">
-          <div className="globe" />
-        </div>
+        <Globe3D />
         <div className="relative z-10 flex min-h-full flex-1 flex-col">
           {children}
           <Footer />
