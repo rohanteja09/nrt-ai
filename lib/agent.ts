@@ -5,7 +5,7 @@ import { generateImage } from "./tools/generateImage";
 import { checkImageLimit } from "./rateLimit";
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+const VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const MAX_TOOL_ROUNDS = 3;
 
 const SYSTEM_PROMPT =
@@ -137,17 +137,21 @@ export async function runAgent(
   env: CloudflareEnv,
   history: { role: "user" | "assistant"; content: string }[],
   ip: string,
-  image?: { bytes: number[]; question: string }
+  image?: { dataUrl: string; question: string }
 ): Promise<AgentResult> {
   if (image) {
     const result = await env.AI.run(VISION_MODEL, {
-      image: image.bytes,
-      prompt: image.question || "Describe this image in detail.",
-      max_tokens: 512,
-    });
-    const text = (result as { description?: string; response?: string }).description
-      ?? (result as { description?: string; response?: string }).response
-      ?? "I couldn't analyze that image.";
+      task: "query",
+      image: image.dataUrl,
+      question: image.question || "Describe this image in detail.",
+      max_tokens: 1024,
+      reasoning: false,
+      stream: false,
+    } as never);
+    // Moondream nests its output under `result`
+    const r = result as { result?: { answer?: string; caption?: string }; answer?: string; caption?: string };
+    const text =
+      r.result?.answer ?? r.result?.caption ?? r.answer ?? r.caption ?? "I couldn't analyze that image.";
     return { text, toolCalls: [] };
   }
 

@@ -13,9 +13,13 @@ interface ChatApiResponse {
   error?: string;
 }
 
-async function fileToBytes(file: File): Promise<number[]> {
-  const buf = await file.arrayBuffer();
-  return Array.from(new Uint8Array(buf));
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function Chat() {
@@ -62,7 +66,7 @@ export default function Chat() {
         messages: [...history, { role: "user", content: userMsg.text }],
       };
       if (image) {
-        payload.image = { bytes: await fileToBytes(image.file), question: userMsg.text };
+        payload.image = { dataUrl: await fileToDataUrl(image.file), question: userMsg.text };
       }
 
       const res = await fetch("/api/chat", {

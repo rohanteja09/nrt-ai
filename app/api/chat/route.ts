@@ -4,7 +4,7 @@ import { checkChatLimit } from "@/lib/rateLimit";
 
 interface ChatRequestBody {
   messages?: { role: "user" | "assistant"; content: string }[];
-  image?: { bytes: number[]; question: string };
+  image?: { dataUrl: string; question: string };
 }
 
 export async function POST(req: Request) {
