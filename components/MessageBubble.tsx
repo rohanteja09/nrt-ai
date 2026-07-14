@@ -2,9 +2,8 @@
 
 import { motion } from "framer-motion";
 import ToolCallCard from "./ToolCallCard";
-import CodeSandbox from "./CodeSandbox";
+import Markdown from "./Markdown";
 import { useTypewriter } from "@/lib/useTypewriter";
-import { hasCodeFence, parseSegments } from "@/lib/parseMessage";
 import type { ChatMessage } from "@/lib/types";
 
 export default function MessageBubble({
@@ -15,8 +14,9 @@ export default function MessageBubble({
   animateText: boolean;
 }) {
   const isUser = message.role === "user";
-  const containsCode = !isUser && hasCodeFence(message.text);
-  const shownText = useTypewriter(message.text, animateText && !isUser && !containsCode);
+  // Markdown structure (fences, lists) breaks mid-animation, so only animate plain prose.
+  const isPlainProse = !isUser && !/[`*#\[\|]/.test(message.text);
+  const shownText = useTypewriter(message.text, animateText && isPlainProse);
 
   return (
     <motion.div
@@ -40,19 +40,14 @@ export default function MessageBubble({
           />
         )}
         {message.toolCalls?.map((tc) => <ToolCallCard key={tc.id} call={tc} />)}
-        {containsCode ? (
-          parseSegments(message.text).map((seg, i) =>
-            seg.type === "code" ? (
-              <CodeSandbox key={i} code={seg.content} />
-            ) : seg.content.trim() ? (
-              <p key={i} className="whitespace-pre-wrap">
-                {seg.content.trim()}
-              </p>
-            ) : null
-          )
-        ) : (
-          message.text && <p className="whitespace-pre-wrap">{shownText}</p>
-        )}
+        {message.text &&
+          (isUser ? (
+            <p className="whitespace-pre-wrap">{message.text}</p>
+          ) : isPlainProse ? (
+            <p className="whitespace-pre-wrap">{shownText}</p>
+          ) : (
+            <Markdown text={message.text} />
+          ))}
       </div>
     </motion.div>
   );

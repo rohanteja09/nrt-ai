@@ -103,6 +103,36 @@ export interface AgentResult {
   toolCalls: ToolCall[];
 }
 
+// Llama's tool-calling template derails on messages that don't need a tool
+// ("hi" produces rambling about function calls), so a cheap router call first
+// decides whether tools should be attached at all.
+const ROUTER_PROMPT =
+  "You are a router. Look at the user's latest message and reply with exactly one word:\n" +
+  "- image : they explicitly ask to generate/create/draw/make an image, picture, photo, or artwork\n" +
+  "- browse : they give a specific URL to read or summarize\n" +
+  "- search : they ask about current events, live data, or facts that require looking up the web\n" +
+  "- none : anything else (greetings, chat, opinions, writing text, writing code, explanations)\n" +
+  "Reply with only the single word.";
+
+async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"image" | "browse" | "search" | "none"> {
+  try {
+    const result = (await env.AI.run(MODEL, {
+      messages: [
+        { role: "system", content: ROUTER_PROMPT },
+        { role: "user", content: userMessage.slice(0, 500) },
+      ],
+      max_tokens: 8,
+    })) as { response?: string };
+    const word = (result.response ?? "").trim().toLowerCase();
+    if (word.startsWith("image")) return "image";
+    if (word.startsWith("browse")) return "browse";
+    if (word.startsWith("search")) return "search";
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+
 export async function runAgent(
   env: CloudflareEnv,
   history: { role: "user" | "assistant"; content: string }[],
@@ -126,9 +156,11 @@ export async function runAgent(
     ...history.slice(-12),
   ];
   const toolCalls: ToolCall[] = [];
+  const lastUserMessage = history[history.length - 1]?.content ?? "";
+  const route = await routeMessage(env, lastUserMessage);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const allowTools = round < MAX_TOOL_ROUNDS - 1;
+    const allowTools = route !== "none" && round < MAX_TOOL_ROUNDS - 1;
     const result = await env.AI.run(MODEL, {
       messages,
       ...(allowTools ? { tools: TOOLS } : {}),
