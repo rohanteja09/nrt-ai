@@ -40,7 +40,9 @@ export default function Chat() {
   const [toast, setToast] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,6 +85,20 @@ export default function Chat() {
     setAttachedImage({ file, previewUrl: URL.createObjectURL(file) });
   }
 
+  function stop() {
+    abortRef.current?.abort();
+    setAwaitingFirstToken(false);
+  }
+
+  function editMessage(id: string) {
+    if (awaitingFirstToken) stop();
+    const idx = messages.findIndex((m) => m.id === id);
+    if (idx === -1) return;
+    setInput(messages[idx].text);
+    setMessages(messages.slice(0, idx));
+    textareaRef.current?.focus();
+  }
+
   async function send(overrideText?: string) {
     const text = (overrideText ?? input).trim();
     const image = attachedImage;
@@ -111,10 +127,13 @@ export default function Chat() {
         payload.image = { dataUrl: await fileToDataUrl(image.file), question: userMsg.text };
       }
 
+      const controller = new AbortController();
+      abortRef.current = controller;
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
       const data: ChatApiResponse = await res.json();
       setAwaitingFirstToken(false);
@@ -157,8 +176,11 @@ export default function Chat() {
         );
         setLastAssistantId(replyId);
       }, 900);
-    } catch {
+    } catch (err) {
       setAwaitingFirstToken(false);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return; // user pressed Stop — leave the transcript as-is
+      }
       const replyId = crypto.randomUUID();
       setMessages((m) => [
         ...m,
@@ -193,7 +215,12 @@ export default function Chat() {
         <div className="flex-1 overflow-y-auto py-6">
           <AnimatePresence initial={false}>
             {messages.map((m) => (
-              <MessageBubble key={m.id} message={m} animateText={m.id === lastAssistantId} />
+              <MessageBubble
+                key={m.id}
+                message={m}
+                animateText={m.id === lastAssistantId}
+                onEdit={m.role === "user" ? () => editMessage(m.id) : undefined}
+              />
             ))}
           </AnimatePresence>
           {awaitingFirstToken && (
@@ -253,6 +280,7 @@ export default function Chat() {
             {"\u{1F4CE}"}
           </motion.button>
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => setFocused(true)}
@@ -267,15 +295,28 @@ export default function Chat() {
             placeholder="Ask NRT AI to search, browse, generate an image, or write code..."
             className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-zinc-400"
           />
-          <motion.button
-            whileHover={{ scale: input.trim() || attachedImage ? 1.05 : 1 }}
-            whileTap={{ scale: input.trim() || attachedImage ? 0.95 : 1 }}
-            onClick={() => send()}
-            disabled={(!input.trim() && !attachedImage) || awaitingFirstToken}
-            className="rounded-xl bg-gradient-to-br from-blue-700 to-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity disabled:opacity-30"
-          >
-            Send
-          </motion.button>
+          {awaitingFirstToken ? (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={stop}
+              title="Stop the current request"
+              className="flex items-center gap-1.5 rounded-xl border border-red-300/70 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 shadow-sm dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400"
+            >
+              <span className="inline-block h-2.5 w-2.5 rounded-[3px] bg-current" />
+              Stop
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={{ scale: input.trim() || attachedImage ? 1.05 : 1 }}
+              whileTap={{ scale: input.trim() || attachedImage ? 0.95 : 1 }}
+              onClick={() => send()}
+              disabled={!input.trim() && !attachedImage}
+              className="rounded-xl bg-gradient-to-br from-blue-700 to-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity disabled:opacity-30"
+            >
+              Send
+            </motion.button>
+          )}
         </motion.div>
       </div>
     </div>
