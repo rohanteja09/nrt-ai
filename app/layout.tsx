@@ -33,6 +33,9 @@ export default function RootLayout({
           <div className="aurora-blob one" />
           <div className="aurora-blob two" />
         </div>
+        <div className="globe-wrap" aria-hidden="true">
+          <div className="globe" />
+        </div>
         <div className="relative z-10 flex min-h-full flex-1 flex-col">
           {children}
           <Footer />

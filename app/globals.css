@@ -123,6 +123,63 @@ body {
   100% { transform: translateX(100%); }
 }
 
+/* ---------- Rotating globe background ---------- */
+.globe-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.globe {
+  position: relative;
+  width: min(520px, 80vw);
+  height: min(520px, 80vw);
+  border-radius: 50%;
+  overflow: hidden;
+  opacity: 0.09;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  /* moving meridians + static latitude lines */
+  background:
+    repeating-linear-gradient(90deg, rgba(59, 130, 246, 0.9) 0 1.5px, transparent 1.5px 52px),
+    repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.7) 0 1px, transparent 1px 64px);
+  background-size: 520px 100%, 100% 100%;
+  animation: globe-rotate 18s linear infinite;
+}
+
+.globe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* spherical shading so the flat stripes read as a globe */
+  background: radial-gradient(circle at 38% 35%, transparent 30%, rgba(59, 130, 246, 0.35) 78%, rgba(2, 6, 23, 0.9) 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .globe {
+    opacity: 0.14;
+  }
+}
+
+@keyframes globe-rotate {
+  to {
+    background-position: 520px 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .globe,
+  .aurora-blob,
+  .gradient-bar,
+  .gradient-text {
+    animation: none;
+  }
+}
+
 /* ---------- Animated footer hairline ---------- */
 .gradient-bar {
   height: 1px;
