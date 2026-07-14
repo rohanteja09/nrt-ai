@@ -1,0 +1,41 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { runAgent } from "@/lib/agent";
+import { checkChatLimit } from "@/lib/rateLimit";
+
+interface ChatRequestBody {
+  messages?: { role: "user" | "assistant"; content: string }[];
+  image?: { bytes: number[]; question: string };
+}
+
+export async function POST(req: Request) {
+  const { env } = await getCloudflareContext({ async: true });
+
+  let body: ChatRequestBody;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const { messages, image } = body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return Response.json({ error: "messages array is required." }, { status: 400 });
+  }
+
+  const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
+  const allowed = await checkChatLimit(env.RATE_LIMIT_KV, ip);
+  if (!allowed) {
+    return Response.json(
+      { error: "Daily free-tier limit reached for this visitor. Please try again tomorrow." },
+      { status: 429 }
+    );
+  }
+
+  try {
+    const result = await runAgent(env, messages, ip, image);
+    return Response.json(result);
+  } catch (err) {
+    console.error(err);
+    return Response.json({ error: "Something went wrong talking to the AI backend." }, { status: 500 });
+  }
+}

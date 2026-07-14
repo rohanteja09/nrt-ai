@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #08080a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ---------- Aurora background ---------- */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(50px);
+  opacity: 0.25;
+  width: min(280px, 45vw);
+  height: min(280px, 45vw);
+  transform: translateZ(0);
+}
+
+@media (prefers-color-scheme: light) {
+  .aurora-blob {
+    opacity: 0.14;
+  }
+}
+
+.aurora-blob.one {
+  top: -6%;
+  left: -6%;
+  background: radial-gradient(circle at 30% 30%, #6366f1, transparent 70%);
+  animation: drift-a 40s ease-in-out infinite;
+}
+
+.aurora-blob.two {
+  top: 6%;
+  right: -6%;
+  background: radial-gradient(circle at 60% 40%, #22d3ee, transparent 70%);
+  animation: drift-b 46s ease-in-out infinite;
+}
+
+.aurora-blob.three {
+  display: none;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translateZ(0) translate(0, 0); }
+  50% { transform: translateZ(0) translate(4vw, 3vh); }
+}
+
+@keyframes drift-b {
+  0%, 100% { transform: translateZ(0) translate(0, 0); }
+  50% { transform: translateZ(0) translate(-4vw, 3vh); }
+}
+
+/* ---------- Animated gradient text ---------- */
+.gradient-text {
+  background: linear-gradient(90deg, #60a5fa, #1e3a8a, #22d3ee, #60a5fa);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gradient-shift 6s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ---------- Typing dots ---------- */
+.typing-dot {
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* ---------- Shimmer for running tool calls ---------- */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+@keyframes shimmer-sweep {
+  100% { transform: translateX(100%); }
+}
+
+/* ---------- Orbit spinner (logo + generic thinking state) ---------- */
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+.orbit-spin {
+  animation: orbit-spin 2.4s linear infinite;
+  transform-origin: center;
+}
+.orbit-spin.slow {
+  animation-duration: 6s;
+}
+
+/* ---------- Radar ping (search tool) ---------- */
+.radar-ping {
+  position: relative;
+  display: inline-flex;
+}
+.radar-ping .ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  animation: radar-expand 1.8s ease-out infinite;
+}
+.radar-ping .ring.delay {
+  animation-delay: 0.6s;
+}
+@keyframes radar-expand {
+  0% { transform: scale(0.5); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ---------- Rotating globe (browse tool) ---------- */
+.spin-slow {
+  display: inline-block;
+  animation: orbit-spin 2.2s linear infinite;
+}
+
+/* ---------- Resolving blur (image generation) ---------- */
+.blur-resolve {
+  animation: blur-resolve 1.8s ease-in-out infinite;
+}
+@keyframes blur-resolve {
+  0%, 100% { filter: blur(7px); opacity: 0.55; }
+  50% { filter: blur(1px); opacity: 0.95; }
+}
+
+/* ---------- Scrollbar ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border-radius: 9999px;
+}
