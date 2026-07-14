@@ -1,12 +1,26 @@
 interface SearchResult {
   title: string;
   snippet: string;
+  url: string;
 }
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
 function formatResults(results: SearchResult[]): string {
-  return results.map((r, i) => `${i + 1}. ${r.title}\n${r.snippet}`).join("\n\n");
+  return results
+    .map((r, i) => `${i + 1}. ${r.title}${r.url ? `\nURL: ${r.url}` : ""}${r.snippet ? `\n${r.snippet}` : ""}`)
+    .join("\n\n");
+}
+
+/** DDG result hrefs are redirects like //duckduckgo.com/l/?uddg=<encoded-real-url>. */
+function decodeDdgHref(href: string | null): string {
+  if (!href) return "";
+  try {
+    const u = new URL(href, "https://duckduckgo.com");
+    return u.searchParams.get("uddg") ?? u.toString();
+  } catch {
+    return "";
+  }
 }
 
 /** Primary: DuckDuckGo HTML endpoint (sometimes blocks datacenter IPs). */
@@ -18,17 +32,15 @@ async function ddgHtml(query: string): Promise<SearchResult[]> {
   if (res.status !== 200) return [];
 
   const results: SearchResult[] = [];
-  let title = "";
   let snippet = "";
 
   const rewriter = new HTMLRewriter()
     .on("a.result__a", {
+      element(el) {
+        results.push({ title: "", snippet: "", url: decodeDdgHref(el.getAttribute("href")) });
+      },
       text(t) {
-        title += t.text;
-        if (t.lastInTextNode) {
-          results.push({ title: title.trim(), snippet: "" });
-          title = "";
-        }
+        if (results.length > 0) results[results.length - 1].title += t.text;
       },
     })
     .on("a.result__snippet", {
@@ -42,7 +54,10 @@ async function ddgHtml(query: string): Promise<SearchResult[]> {
     });
 
   await rewriter.transform(res).arrayBuffer();
-  return results.filter((r) => r.title).slice(0, 5);
+  return results
+    .map((r) => ({ ...r, title: r.title.trim() }))
+    .filter((r) => r.title)
+    .slice(0, 5);
 }
 
 /** Fallback 1: DuckDuckGo lite endpoint (different frontend, sometimes unblocked when html is). */
@@ -53,17 +68,15 @@ async function ddgLite(query: string): Promise<SearchResult[]> {
   if (!res.ok) return [];
 
   const results: SearchResult[] = [];
-  let title = "";
   let snippet = "";
 
   const rewriter = new HTMLRewriter()
     .on("a.result-link", {
+      element(el) {
+        results.push({ title: "", snippet: "", url: decodeDdgHref(el.getAttribute("href")) });
+      },
       text(t) {
-        title += t.text;
-        if (t.lastInTextNode) {
-          results.push({ title: title.trim(), snippet: "" });
-          title = "";
-        }
+        if (results.length > 0) results[results.length - 1].title += t.text;
       },
     })
     .on("td.result-snippet", {
@@ -77,7 +90,10 @@ async function ddgLite(query: string): Promise<SearchResult[]> {
     });
 
   await rewriter.transform(res).arrayBuffer();
-  return results.filter((r) => r.title).slice(0, 5);
+  return results
+    .map((r) => ({ ...r, title: r.title.trim() }))
+    .filter((r) => r.title)
+    .slice(0, 5);
 }
 
 /** Fallback 2: Wikipedia search API (keyless, JSON, reliable from datacenter IPs). */
@@ -94,6 +110,7 @@ async function wikipedia(query: string): Promise<SearchResult[]> {
   return (data.query?.search ?? []).map((s) => ({
     title: `${s.title} (Wikipedia)`,
     snippet: s.snippet.replace(/<[^>]+>/g, ""),
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(s.title.replace(/ /g, "_"))}`,
   }));
 }
 

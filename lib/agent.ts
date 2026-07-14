@@ -32,7 +32,10 @@ const SYSTEM_PROMPT =
   "User: \"How are you?\" -> plain text reply, no tool call.\n" +
   "User: \"Generate an image of a sunset\" -> call generate_image with prompt \"a sunset\".\n" +
   "User: \"What's the weather like today in Tokyo?\" -> call web_search.\n\n" +
-  "If asked to write code, put it in a fenced code block. Be concise and helpful.";
+  "If asked to write code, put it in a fenced code block. Be concise and helpful.\n\n" +
+  "IMPORTANT — links: always write URLs as markdown links, e.g. [github.com/rohanteja09](https://github.com/rohanteja09), " +
+  "never as bare text. When you answer from web_search or browse_page results, cite your sources at the end as a short " +
+  "markdown list of links using the URLs from the tool results. Accurate, clickable sources matter for research.";
 
 interface ToolSpec {
   type: "function";
