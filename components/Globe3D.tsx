@@ -5,22 +5,6 @@ import { useEffect, useRef, useState } from "react";
 const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 
-// Rough lat/lon of major hubs, used as endpoints for the glowing connection arcs.
-const HUBS: [number, number][] = [
-  [37.77, -122.42], // San Francisco
-  [40.71, -74.0], // New York
-  [51.51, -0.13], // London
-  [48.85, 2.35], // Paris
-  [35.68, 139.69], // Tokyo
-  [1.35, 103.82], // Singapore
-  [19.08, 72.88], // Mumbai
-  [-33.87, 151.21], // Sydney
-  [55.76, 37.62], // Moscow
-  [-23.55, -46.63], // Sao Paulo
-  [25.2, 55.27], // Dubai
-  [13.09, 80.27], // Chennai
-];
-
 function toVector3(lat: number, lon: number, radius: number, THREE: typeof import("three")) {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -31,27 +15,89 @@ function toVector3(lat: number, lon: number, radius: number, THREE: typeof impor
   );
 }
 
-/** Simple radial-gradient sphere texture, generated on a canvas — no network request. */
-function planetTexture(THREE: typeof import("three"), stops: [number, string][]) {
+/** Simple gradient-with-noise sphere texture, generated on a canvas — no network request. */
+function planetTexture(THREE: typeof import("three"), stops: [number, string][], bands = false) {
   const c = document.createElement("canvas");
-  c.width = c.height = 128;
+  c.width = 256;
+  c.height = 128;
   const ctx = c.getContext("2d")!;
   const grad = ctx.createLinearGradient(0, 0, 0, 128);
   stops.forEach(([offset, color]) => grad.addColorStop(offset, color));
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 128, 128);
-  // a few faint noise patches for a less flat look
+  ctx.fillRect(0, 0, 256, 128);
+
+  if (bands) {
+    // horizontal storm bands for gas giants
+    for (let i = 0; i < 10; i++) {
+      const y = (i / 10) * 128 + Math.random() * 4;
+      ctx.globalAlpha = 0.12 + Math.random() * 0.15;
+      ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#000000";
+      ctx.fillRect(0, y, 256, 4 + Math.random() * 5);
+    }
+  }
   ctx.globalAlpha = 0.15;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 50; i++) {
     ctx.fillStyle = i % 2 === 0 ? "#000000" : "#ffffff";
-    const r = 3 + Math.random() * 8;
+    const r = 2 + Math.random() * 6;
     ctx.beginPath();
-    ctx.arc(Math.random() * 128, Math.random() * 128, r, 0, Math.PI * 2);
+    ctx.arc(Math.random() * 256, Math.random() * 128, r, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** Jupiter needs its Great Red Spot on top of the banded gradient. */
+function jupiterTexture(THREE: typeof import("three")) {
+  const tex = planetTexture(
+    THREE,
+    [
+      [0, "#e8d2a8"],
+      [0.35, "#c9a26b"],
+      [0.5, "#a9744a"],
+      [0.65, "#c9a26b"],
+      [1, "#8a6238"],
+    ],
+    true
+  );
+  const ctx = (tex.image as HTMLCanvasElement).getContext("2d")!;
+  const grsGrad = ctx.createRadialGradient(190, 78, 2, 190, 78, 16);
+  grsGrad.addColorStop(0, "#c1512f");
+  grsGrad.addColorStop(1, "rgba(193,81,47,0)");
+  ctx.fillStyle = grsGrad;
+  ctx.beginPath();
+  ctx.ellipse(190, 78, 16, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Soft radial glow sprite texture (comet heads, sun corona flares, distant galaxies). */
+function glowTexture(THREE: typeof import("three"), inner: string, outer: string) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d")!;
+  const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(0.4, outer);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+interface StreakBody {
+  group: import("three").Group;
+  lineMat: import("three").LineBasicMaterial;
+  lineGeo: import("three").BufferGeometry;
+  headMat: import("three").SpriteMaterial;
+  start: import("three").Vector3;
+  dir: import("three").Vector3;
+  t: number;
+  duration: number;
+  travel: number;
 }
 
 export default function Globe3D() {
@@ -73,8 +119,9 @@ export default function Globe3D() {
 
       const scene = new THREE.Scene();
 
-      // Deep-space background (radial gradient) so no page background ever
-      // shows through the gaps between stars — solid space, not white/gray.
+      // Deep-space background: radial gradient plus a couple of soft nebula
+      // tints, so no page background ever shows through and the void has
+      // some color instead of being flat black.
       const bgCanvas = document.createElement("canvas");
       bgCanvas.width = bgCanvas.height = 512;
       const bgCtx = bgCanvas.getContext("2d")!;
@@ -84,10 +131,22 @@ export default function Globe3D() {
       grad.addColorStop(1, "#000103");
       bgCtx.fillStyle = grad;
       bgCtx.fillRect(0, 0, 512, 512);
+      bgCtx.globalCompositeOperation = "screen";
+      const nebulaA = bgCtx.createRadialGradient(90, 380, 10, 90, 380, 220);
+      nebulaA.addColorStop(0, "rgba(99,60,180,0.35)");
+      nebulaA.addColorStop(1, "rgba(99,60,180,0)");
+      bgCtx.fillStyle = nebulaA;
+      bgCtx.fillRect(0, 0, 512, 512);
+      const nebulaB = bgCtx.createRadialGradient(430, 120, 10, 430, 120, 200);
+      nebulaB.addColorStop(0, "rgba(37,99,235,0.3)");
+      nebulaB.addColorStop(1, "rgba(37,99,235,0)");
+      bgCtx.fillStyle = nebulaB;
+      bgCtx.fillRect(0, 0, 512, 512);
+      bgCtx.globalCompositeOperation = "source-over";
       const bgTexture = track(new THREE.CanvasTexture(bgCanvas));
       scene.background = bgTexture;
 
-      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 100);
       camera.position.z = 2.15;
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -95,137 +154,91 @@ export default function Globe3D() {
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      // Sunlight (creates a realistic day/night terminator across the sphere).
-      // Fixed in world space — the globe rotates under it, like the real thing.
-      const sun = new THREE.DirectionalLight(0xffffff, 2.8);
-      sun.position.set(4, 1.6, 2.5);
-      scene.add(sun);
-      scene.add(new THREE.AmbientLight(0x4466bb, 0.42));
+      // Sunlight — a fixed-direction light approximating rays from the Sun
+      // mesh's position, so every planet is lit consistently from one side.
+      const SUN_POS = new THREE.Vector3(-10.5, 2, -16);
+      const sunLight = new THREE.DirectionalLight(0xffffff, 2.8);
+      sunLight.position.copy(SUN_POS).normalize().multiplyScalar(4);
+      scene.add(sunLight);
+      scene.add(new THREE.AmbientLight(0x4466bb, 0.38));
 
-      // Small moon, visible only when it's night in India right now
-      const moon = new THREE.Mesh(
-        track(new THREE.SphereGeometry(0.16, 32, 32)),
-        new THREE.MeshStandardMaterial({ color: 0xd6dbe6, roughness: 0.9, metalness: 0 })
+      const commonSphereGeo = track(new THREE.SphereGeometry(1, 48, 48));
+
+      // ---- The Sun: emissive core + additive corona + occasional flare bursts
+      const sunGroup = new THREE.Group();
+      sunGroup.position.copy(SUN_POS);
+      scene.add(sunGroup);
+      const sunCore = new THREE.Mesh(
+        commonSphereGeo,
+        new THREE.MeshBasicMaterial({ color: 0xfff4d6 })
       );
-      moon.position.set(-3.4, 2.1, -5.5);
-      scene.add(moon);
-
-      const globeGroup = new THREE.Group();
-      globeGroup.rotation.z = (23.4 * Math.PI) / 180;
-      scene.add(globeGroup);
-
-      // Orient the globe so India faces the fixed sun (day) or faces away
-      // from it (night), matching the real clock in India right now (IST,
-      // UTC+5:30) — so opening the site in the morning shows a lit globe
-      // and opening it at night shows the dark side with city lights + moon.
-      const now = new Date();
-      const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60;
-      const istHour = (utcHours + 5.5) % 24;
-      const isDayInIndia = istHour >= 6 && istHour < 18;
-      moon.visible = !isDayInIndia;
-
-      const INDIA: [number, number] = [21, 78.96];
-      const indiaLocal = toVector3(INDIA[0], INDIA[1], 1, THREE);
-      const indiaAzimuth = Math.atan2(indiaLocal.x, indiaLocal.z);
-      const sunAzimuth = Math.atan2(sun.position.x, sun.position.z);
-      const targetAzimuth = isDayInIndia ? sunAzimuth : sunAzimuth + Math.PI;
-      globeGroup.rotation.y = targetAzimuth - indiaAzimuth;
-
-      const sphereGeo = track(new THREE.SphereGeometry(1, 96, 96));
-
-      const placeholder = new THREE.Mesh(
-        sphereGeo,
-        new THREE.MeshBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.9 })
-      );
-      globeGroup.add(placeholder);
-
-      const loader = new THREE.TextureLoader();
-      loader.setCrossOrigin("anonymous");
-      let dayTex: import("three").Texture | null = null;
-      let nightTex: import("three").Texture | null = null;
-
-      const tryBuildEarth = () => {
-        if (!dayTex || !nightTex || cancelled) return;
-        const earth = new THREE.Mesh(
-          sphereGeo,
-          new THREE.MeshStandardMaterial({
-            map: dayTex,
-            emissiveMap: nightTex,
-            emissive: new THREE.Color(0xffffff),
-            emissiveIntensity: 1.5,
-            roughness: 0.75,
-            metalness: 0,
-          })
-        );
-        globeGroup.add(earth);
-        placeholder.visible = false;
-      };
-
-      loader.load(DAY_TEXTURE, (tex) => {
-        if (cancelled) return;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        dayTex = tex;
-        tryBuildEarth();
-      });
-      loader.load(NIGHT_TEXTURE, (tex) => {
-        if (cancelled) return;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        nightTex = tex;
-        tryBuildEarth();
-      });
-
-      // Warm glowing arcs connecting hub cities, like flight/data routes
-      const arcsGroup = new THREE.Group();
-      globeGroup.add(arcsGroup);
-      const arcMaterial = new THREE.LineBasicMaterial({
-        color: 0xfbbf24,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-      });
-      const arcCount = 16;
-      for (let i = 0; i < arcCount; i++) {
-        const a = HUBS[Math.floor(Math.random() * HUBS.length)];
-        let b = HUBS[Math.floor(Math.random() * HUBS.length)];
-        while (b === a) b = HUBS[Math.floor(Math.random() * HUBS.length)];
-
-        const start = toVector3(a[0], a[1], 1.006, THREE);
-        const end = toVector3(b[0], b[1], 1.006, THREE);
-        const mid = start.clone().add(end).multiplyScalar(0.5);
-        const arcHeight = 1 + start.distanceTo(end) * 0.35;
-        mid.normalize().multiplyScalar(arcHeight);
-
-        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-        const points = curve.getPoints(48);
-        const geo = track(new THREE.BufferGeometry().setFromPoints(points));
-        arcsGroup.add(new THREE.Line(geo, arcMaterial));
-      }
-
-      // Glowing node points at the hub cities
-      const nodePositions = new Float32Array(HUBS.length * 3);
-      HUBS.forEach(([lat, lon], i) => {
-        const v = toVector3(lat, lon, 1.012, THREE);
-        nodePositions[i * 3] = v.x;
-        nodePositions[i * 3 + 1] = v.y;
-        nodePositions[i * 3 + 2] = v.z;
-      });
-      const nodeGeo = track(new THREE.BufferGeometry());
-      nodeGeo.setAttribute("position", new THREE.BufferAttribute(nodePositions, 3));
-      const nodes = new THREE.Points(
-        nodeGeo,
-        new THREE.PointsMaterial({
-          color: 0xfcd34d,
-          size: 0.022,
-          transparent: true,
-          opacity: 0.95,
+      sunCore.scale.setScalar(1.3);
+      sunGroup.add(sunCore);
+      const sunCorona = new THREE.Mesh(
+        track(new THREE.SphereGeometry(1.7, 48, 48)),
+        new THREE.ShaderMaterial({
+          vertexShader: `
+            varying vec3 vNormal;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+          fragmentShader: `
+            varying vec3 vNormal;
+            void main() {
+              float intensity = pow(0.55 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+              gl_FragColor = vec4(1.0, 0.75, 0.35, 1.0) * intensity;
+            }`,
           blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          transparent: true,
+          depthWrite: false,
         })
       );
-      arcsGroup.add(nodes);
+      sunGroup.add(sunCorona);
+      const flareTexture = track(glowTexture(THREE, "rgba(255,240,200,1)", "rgba(255,180,90,0.7)"));
+      const flareSprites = [0, 1, 2].map(() => {
+        const mat = new THREE.SpriteMaterial({
+          map: flareTexture,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.setScalar(0.6);
+        sunGroup.add(sprite);
+        return { sprite, mat, t: Math.random() * 10, active: false };
+      });
 
-      // Atmosphere rim glow
-      const atmosphere = new THREE.Mesh(
-        track(new THREE.SphereGeometry(1.15, 64, 64)),
+      // ---- Planets, spread wide left-to-right so the center stays clear
+      // for the chat UI, each lit by the fixed sun-direction light above.
+      function makePlanet(radius: number, position: [number, number, number], tex: import("three").Texture) {
+        const mesh = new THREE.Mesh(commonSphereGeo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+        mesh.scale.setScalar(radius);
+        mesh.position.set(...position);
+        scene.add(mesh);
+        return mesh;
+      }
+
+      const mercury = makePlanet(0.1, [-8.05, 0.8, -15], track(planetTexture(THREE, [[0, "#b9ada0"], [1, "#7c7166"]])));
+      const venus = makePlanet(0.16, [-5.95, -1.0, -15.5], track(planetTexture(THREE, [[0, "#f3e2b3"], [1, "#c9a86a"]])));
+
+      // Earth keeps its day/night blend + a tiny moon, now scaled down as
+      // one planet among many rather than the single hero of the scene.
+      const earthGroup = new THREE.Group();
+      earthGroup.position.set(-3.5, 1.3, -16);
+      earthGroup.rotation.z = (23.4 * Math.PI) / 180;
+      scene.add(earthGroup);
+      const earthRadius = 0.2;
+      const earthPlaceholder = new THREE.Mesh(
+        commonSphereGeo,
+        new THREE.MeshBasicMaterial({ color: 0x1e293b })
+      );
+      earthPlaceholder.scale.setScalar(earthRadius);
+      earthGroup.add(earthPlaceholder);
+      const earthAtmosphere = new THREE.Mesh(
+        track(new THREE.SphereGeometry(earthRadius * 1.16, 32, 32)),
         new THREE.ShaderMaterial({
           vertexShader: `
             varying vec3 vNormal;
@@ -245,10 +258,114 @@ export default function Globe3D() {
           depthWrite: false,
         })
       );
-      scene.add(atmosphere);
+      earthGroup.add(earthAtmosphere);
+      const moon = new THREE.Mesh(
+        track(new THREE.SphereGeometry(0.045, 20, 20)),
+        new THREE.MeshStandardMaterial({ color: 0xd6dbe6, roughness: 0.9 })
+      );
+      moon.position.set(earthRadius * 2.1, earthRadius * 0.6, 0);
+      earthGroup.add(moon);
 
-      // Starfield — stars all around (so rotating the view never reveals a
-      // gap), each with its own random twinkle phase driven by a shader.
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin("anonymous");
+      let dayTex: import("three").Texture | null = null;
+      let nightTex: import("three").Texture | null = null;
+      const tryBuildEarth = () => {
+        if (!dayTex || !nightTex || cancelled) return;
+        const earth = new THREE.Mesh(
+          commonSphereGeo,
+          new THREE.MeshStandardMaterial({
+            map: dayTex,
+            emissiveMap: nightTex,
+            emissive: new THREE.Color(0xffffff),
+            emissiveIntensity: 1.5,
+            roughness: 0.75,
+          })
+        );
+        earth.scale.setScalar(earthRadius);
+        earthGroup.add(earth);
+        earthPlaceholder.visible = false;
+      };
+      loader.load(DAY_TEXTURE, (tex) => {
+        if (cancelled) return;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        dayTex = tex;
+        tryBuildEarth();
+      });
+      loader.load(NIGHT_TEXTURE, (tex) => {
+        if (cancelled) return;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        nightTex = tex;
+        tryBuildEarth();
+      });
+
+      // Orient Earth so India faces the sun (day) or faces away (night),
+      // matching the real clock in India right now (IST, UTC+5:30).
+      const now = new Date();
+      const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60;
+      const istHour = (utcHours + 5.5) % 24;
+      const isDayInIndia = istHour >= 6 && istHour < 18;
+      moon.visible = !isDayInIndia;
+      const INDIA: [number, number] = [21, 78.96];
+      const indiaLocal = toVector3(INDIA[0], INDIA[1], 1, THREE);
+      const indiaAzimuth = Math.atan2(indiaLocal.x, indiaLocal.z);
+      const sunAzimuth = Math.atan2(sunLight.position.x, sunLight.position.z);
+      const targetAzimuth = isDayInIndia ? sunAzimuth : sunAzimuth + Math.PI;
+      earthGroup.rotation.y = targetAzimuth - indiaAzimuth;
+
+      const mars = makePlanet(0.14, [-1.26, -1.4, -16.5], track(planetTexture(THREE, [[0, "#e2795a"], [0.5, "#b8492e"], [1, "#7a2c1c"]])));
+      const jupiter = makePlanet(0.55, [1.82, 1.6, -18], track(jupiterTexture(THREE)));
+      const saturn = makePlanet(0.46, [4.9, -1.0, -19], track(planetTexture(THREE, [[0, "#e8d5a8"], [0.5, "#c9ac74"], [1, "#8a6f45"]])));
+      const saturnRing = new THREE.Mesh(
+        track(new THREE.RingGeometry(0.62, 0.98, 64)),
+        new THREE.MeshBasicMaterial({ color: 0xd8c396, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
+      );
+      saturnRing.rotation.x = Math.PI / 2.4;
+      saturn.add(saturnRing);
+      const uranus = makePlanet(0.28, [7.35, 1.2, -20], track(planetTexture(THREE, [[0, "#c9f3ee"], [1, "#8fd0c9"]])));
+      const neptune = makePlanet(0.27, [9.45, -0.6, -21], track(planetTexture(THREE, [[0, "#5b7fe0"], [1, "#2c3fa0"]])));
+
+      const orbitingPlanets = [mercury, venus, mars, jupiter, saturn, uranus, neptune];
+
+      // ---- Asteroid belt between Mars and Jupiter, Kuiper belt beyond Neptune
+      function makeBelt(count: number, xRange: [number, number], yRange: [number, number], z: number, color: number, sizeRange: [number, number]) {
+        const geo = track(new THREE.IcosahedronGeometry(1, 0));
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true });
+        const mesh = new THREE.InstancedMesh(geo, mat, count);
+        const dummy = new THREE.Object3D();
+        for (let i = 0; i < count; i++) {
+          dummy.position.set(
+            xRange[0] + Math.random() * (xRange[1] - xRange[0]),
+            yRange[0] + Math.random() * (yRange[1] - yRange[0]),
+            z + (Math.random() - 0.5) * 1.5
+          );
+          dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+          const s = sizeRange[0] + Math.random() * (sizeRange[1] - sizeRange[0]);
+          dummy.scale.set(s, s * (0.7 + Math.random() * 0.6), s);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        }
+        scene.add(mesh);
+        return { mesh, mat };
+      }
+      const asteroidBelt = makeBelt(60, [-0.28, 1.26], [-0.9, 0.9], -17, 0x8b7d6b, [0.02, 0.05]);
+      const kuiperBelt = makeBelt(45, [10.5, 14], [-1.2, 1.2], -23, 0xaebfd6, [0.015, 0.035]);
+
+      // ---- A couple of soft distant galaxies for background depth
+      const galaxyTexture = track(glowTexture(THREE, "rgba(196,181,253,0.9)", "rgba(129,140,248,0.4)"));
+      const galaxies: import("three").Sprite[] = [
+        [-6, 4.5, -28],
+        [12, -4.5, -30],
+      ].map(([x, y, z]) => {
+        const mat = new THREE.SpriteMaterial({ map: galaxyTexture, transparent: true, opacity: 0.5, depthWrite: false });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.setScalar(6);
+        sprite.position.set(x, y, z);
+        scene.add(sprite);
+        return sprite;
+      });
+
+      // ---- Starfield: stars all around, each with its own twinkle phase.
       const starCount = 1800;
       const starPositions = new Float32Array(starCount * 3);
       const starPhases = new Float32Array(starCount);
@@ -265,16 +382,25 @@ export default function Globe3D() {
       starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
       starGeo.setAttribute("phase", new THREE.BufferAttribute(starPhases, 1));
       const starMaterial = new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 }, uSize: { value: 16 }, uColor: { value: new THREE.Color(0xbfdbfe) } },
+        // uScale mirrors what THREE.PointsMaterial computes internally
+        // (half the drawing-buffer height) so uSize behaves like a normal
+        // "world size" instead of a mystery constant that renders sub-pixel.
+        uniforms: {
+          uTime: { value: 0 },
+          uSize: { value: 0.11 },
+          uScale: { value: (window.innerHeight * Math.min(window.devicePixelRatio, 1.5)) / 2 },
+          uColor: { value: new THREE.Color(0xdbeafe) },
+        },
         vertexShader: `
           attribute float phase;
           uniform float uTime;
           uniform float uSize;
+          uniform float uScale;
           varying float vTwinkle;
           void main() {
             vTwinkle = 0.5 + 0.5 * sin(uTime * 1.6 + phase);
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = uSize * (1.0 / -mvPosition.z);
+            gl_PointSize = uSize * (uScale / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
           }
         `,
@@ -284,7 +410,7 @@ export default function Globe3D() {
           void main() {
             float d = length(gl_PointCoord - vec2(0.5));
             if (d > 0.5) discard;
-            gl_FragColor = vec4(uColor, (0.35 + 0.65 * vTwinkle) * (1.0 - d * 1.7));
+            gl_FragColor = vec4(uColor, (0.45 + 0.55 * vTwinkle) * (1.0 - d * 1.7));
           }
         `,
         transparent: true,
@@ -293,20 +419,14 @@ export default function Globe3D() {
       const stars = new THREE.Points(starGeo, starMaterial);
       scene.add(stars);
 
-      // Occasional shooting star: a short streak that crosses the field and fades.
-      interface Meteor {
-        group: import("three").Group;
-        mat: import("three").LineBasicMaterial;
-        geo: import("three").BufferGeometry;
-        start: import("three").Vector3;
-        dir: import("three").Vector3;
-        t: number;
-        duration: number;
-      }
-      const meteors: Meteor[] = [];
-      let meteorCooldown = 3 + Math.random() * 5;
-      function spawnMeteor() {
-        const r = 13 + Math.random() * 5;
+      // ---- Shooting stars (quick) and a comet (slower, bigger, brighter) —
+      // both use a camera-facing glow sprite for the head so they're never
+      // at risk of being an easy-to-miss 1px GL line.
+      const meteorHeadTexture = track(glowTexture(THREE, "rgba(255,255,255,1)", "rgba(224,242,254,0.85)"));
+      const cometHeadTexture = track(glowTexture(THREE, "rgba(255,255,255,1)", "rgba(165,243,252,0.9)"));
+
+      function spawnStreak(list: StreakBody[], opts: { texture: import("three").Texture; headScale: number; trailLen: number; travel: number; duration: number; radius: [number, number] }) {
+        const r = opts.radius[0] + Math.random() * (opts.radius[1] - opts.radius[0]);
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = Math.random() * Math.PI * 2;
         const start = new THREE.Vector3(
@@ -315,26 +435,50 @@ export default function Globe3D() {
           r * Math.cos(theta)
         );
         const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.3 - 0.6, Math.random() - 0.5).normalize();
-        const geo = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0, 0, 0),
-          dir.clone().multiplyScalar(-1.3),
-        ]);
-        const mat = new THREE.LineBasicMaterial({
-          color: 0xe0f2fe,
-          transparent: true,
-          opacity: 0,
-          blending: THREE.AdditiveBlending,
-        });
+
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), dir.clone().multiplyScalar(-opts.trailLen)]);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0, blending: THREE.AdditiveBlending });
+        const line = new THREE.Line(lineGeo, lineMat);
+
+        const headMat = new THREE.SpriteMaterial({ map: opts.texture, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+        const head = new THREE.Sprite(headMat);
+        head.scale.setScalar(opts.headScale);
+
         const group = new THREE.Group();
-        group.add(new THREE.Line(geo, mat));
+        group.add(line, head);
         group.position.copy(start);
         scene.add(group);
-        meteors.push({ group, mat, geo, start, dir, t: 0, duration: 1 + Math.random() * 0.6 });
+        list.push({ group, lineMat, lineGeo, headMat, start, dir, t: 0, duration: opts.duration, travel: opts.travel });
+      }
+
+      const meteors: StreakBody[] = [];
+      let meteorCooldown = 1.5 + Math.random() * 2.5;
+      const comets: StreakBody[] = [];
+      let cometCooldown = 10 + Math.random() * 12;
+
+      function updateStreaks(list: StreakBody[], dt: number) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          m.t += dt;
+          const p = m.t / m.duration;
+          if (p >= 1) {
+            scene.remove(m.group);
+            m.lineMat.dispose();
+            m.lineGeo.dispose();
+            m.headMat.dispose();
+            list.splice(i, 1);
+            continue;
+          }
+          m.group.position.copy(m.start).addScaledVector(m.dir, p * m.travel);
+          const fade = p < 0.12 ? p / 0.12 : p > 0.65 ? Math.max(0, (1 - p) / 0.35) : 1;
+          m.lineMat.opacity = fade * 0.85;
+          m.headMat.opacity = fade;
+        }
       }
 
       // Subtle mouse-parallax: the camera drifts a little toward the cursor
-      // and always re-centers on the globe, so the scene feels responsive
-      // rather than a static loop. Disabled on touch-only devices.
+      // and re-centers on the scene, so it feels responsive rather than a
+      // static loop. Disabled on touch-only devices.
       const pointer = { x: 0, y: 0 };
       const cameraOffset = { x: 0, y: 0 };
       const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
@@ -346,8 +490,8 @@ export default function Globe3D() {
         window.addEventListener("pointermove", onPointerMove);
       }
 
-      // ---- Satellites: a few small craft, each on its own tilted orbital
-      // plane fixed in world space, circling independently of the globe's spin.
+      // ---- Satellites: a few small craft on tilted orbital planes near the
+      // camera, circling independently — the "foreground" layer.
       const satBodyGeo = track(new THREE.BoxGeometry(0.045, 0.045, 0.07));
       const satPanelGeo = track(new THREE.BoxGeometry(0.16, 0.005, 0.05));
       const satDishGeo = track(new THREE.ConeGeometry(0.02, 0.025, 12));
@@ -391,62 +535,6 @@ export default function Globe3D() {
         return { pivot, craft, speed: cfg.speed };
       });
 
-      // ---- Asteroid belt: an instanced ring of small irregular rocks,
-      // tilted away from Earth's equatorial plane, rotating as a group.
-      const asteroidCount = 70;
-      const asteroidGeo = track(new THREE.IcosahedronGeometry(1, 0));
-      const asteroidMat = new THREE.MeshStandardMaterial({ color: 0x8b7d6b, roughness: 1, flatShading: true });
-      const asteroidMesh = new THREE.InstancedMesh(asteroidGeo, asteroidMat, asteroidCount);
-      const dummy = new THREE.Object3D();
-      const beltRadius = 2.6;
-      for (let i = 0; i < asteroidCount; i++) {
-        const angle = (i / asteroidCount) * Math.PI * 2 + Math.random() * 0.15;
-        const r = beltRadius + (Math.random() - 0.5) * 0.35;
-        const y = (Math.random() - 0.5) * 0.25;
-        dummy.position.set(r * Math.cos(angle), y, r * Math.sin(angle));
-        dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-        const s = 0.012 + Math.random() * 0.028;
-        dummy.scale.set(s, s * (0.7 + Math.random() * 0.6), s);
-        dummy.updateMatrix();
-        asteroidMesh.setMatrixAt(i, dummy.matrix);
-      }
-      const asteroidBelt = new THREE.Group();
-      asteroidBelt.rotation.x = THREE.MathUtils.degToRad(14);
-      asteroidBelt.rotation.z = THREE.MathUtils.degToRad(-6);
-      asteroidBelt.add(asteroidMesh);
-      scene.add(asteroidBelt);
-
-      // ---- Distant background planets, purely decorative
-      const marsTex = track(planetTexture(THREE, [
-        [0, "#e2795a"],
-        [0.5, "#b8492e"],
-        [1, "#7a2c1c"],
-      ]));
-      const mars = new THREE.Mesh(
-        track(new THREE.SphereGeometry(0.55, 32, 32)),
-        new THREE.MeshStandardMaterial({ map: marsTex, roughness: 1 })
-      );
-      mars.position.set(-9, -3.5, -18);
-      scene.add(mars);
-
-      const ringedTex = track(planetTexture(THREE, [
-        [0, "#e8d5a8"],
-        [0.5, "#c9ac74"],
-        [1, "#8a6f45"],
-      ]));
-      const ringedPlanet = new THREE.Mesh(
-        track(new THREE.SphereGeometry(0.75, 32, 32)),
-        new THREE.MeshStandardMaterial({ map: ringedTex, roughness: 1 })
-      );
-      ringedPlanet.position.set(10, 4.5, -22);
-      const ring = new THREE.Mesh(
-        track(new THREE.RingGeometry(1.1, 1.7, 64)),
-        new THREE.MeshBasicMaterial({ color: 0xd8c396, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
-      );
-      ring.rotation.x = Math.PI / 2.4;
-      ringedPlanet.add(ring);
-      scene.add(ringedPlanet);
-
       const clock = new THREE.Clock();
       let raf = 0;
       let running = false;
@@ -454,43 +542,61 @@ export default function Globe3D() {
       function frame() {
         raf = requestAnimationFrame(frame);
         const dt = clock.getDelta();
-        globeGroup.rotation.y += dt * 0.065;
+
+        earthGroup.rotation.y += dt * 0.08;
+        orbitingPlanets.forEach((p, i) => (p.rotation.y += dt * (0.03 + i * 0.006)));
+        sunCore.rotation.y += dt * 0.01;
         stars.rotation.y += dt * 0.004;
         starMaterial.uniforms.uTime.value += dt;
-        asteroidBelt.rotation.y += dt * 0.012;
-        mars.rotation.y += dt * 0.02;
-        ringedPlanet.rotation.y += dt * 0.015;
+        asteroidBelt.mesh.rotation.y += dt * 0.01;
+        kuiperBelt.mesh.rotation.y += dt * 0.006;
         satellites.forEach(({ pivot, craft, speed }) => {
           pivot.rotation.y += dt * speed;
           craft.lookAt(pivot.position);
         });
 
+        flareSprites.forEach((f) => {
+          f.t -= dt;
+          if (f.t <= 0 && !f.active) {
+            f.active = true;
+            f.t = 0;
+            const angle = Math.random() * Math.PI * 2;
+            f.sprite.position.set(Math.cos(angle) * 1.4, Math.sin(angle) * 1.4, 0.3);
+          }
+          if (f.active) {
+            f.t += dt;
+            const p = f.t / 1.4;
+            if (p >= 1) {
+              f.active = false;
+              f.mat.opacity = 0;
+              f.t = 3 + Math.random() * 5;
+            } else {
+              f.mat.opacity = p < 0.3 ? p / 0.3 : (1 - p) / 0.7;
+              f.sprite.scale.setScalar(0.5 + p * 0.5);
+            }
+          }
+        });
+
         meteorCooldown -= dt;
         if (meteorCooldown <= 0 && meteors.length < 1) {
-          spawnMeteor();
-          meteorCooldown = 4 + Math.random() * 7;
+          spawnStreak(meteors, { texture: meteorHeadTexture, headScale: 0.7, trailLen: 2.2, travel: 7, duration: 1.1 + Math.random() * 0.7, radius: [10, 14] });
+          meteorCooldown = 3 + Math.random() * 5;
         }
-        for (let i = meteors.length - 1; i >= 0; i--) {
-          const m = meteors[i];
-          m.t += dt;
-          const p = m.t / m.duration;
-          if (p >= 1) {
-            scene.remove(m.group);
-            m.mat.dispose();
-            m.geo.dispose();
-            meteors.splice(i, 1);
-            continue;
-          }
-          m.group.position.copy(m.start).addScaledVector(m.dir, p * 7);
-          m.mat.opacity = p < 0.12 ? p / 0.12 : p > 0.65 ? Math.max(0, (1 - p) / 0.35) : 1;
+        updateStreaks(meteors, dt);
+
+        cometCooldown -= dt;
+        if (cometCooldown <= 0 && comets.length < 1) {
+          spawnStreak(comets, { texture: cometHeadTexture, headScale: 1.4, trailLen: 5, travel: 10, duration: 3 + Math.random() * 1.5, radius: [16, 22] });
+          cometCooldown = 14 + Math.random() * 16;
         }
+        updateStreaks(comets, dt);
 
         if (hasFinePointer) {
-          cameraOffset.x += (pointer.x * 0.35 - cameraOffset.x) * Math.min(1, dt * 2.5);
-          cameraOffset.y += (-pointer.y * 0.22 - cameraOffset.y) * Math.min(1, dt * 2.5);
+          cameraOffset.x += (pointer.x * 0.4 - cameraOffset.x) * Math.min(1, dt * 2.5);
+          cameraOffset.y += (-pointer.y * 0.25 - cameraOffset.y) * Math.min(1, dt * 2.5);
           camera.position.x = cameraOffset.x;
           camera.position.y = cameraOffset.y;
-          camera.lookAt(0, 0, 0);
+          camera.lookAt(0, 0, -2);
         }
 
         renderer.render(scene, camera);
@@ -514,6 +620,7 @@ export default function Globe3D() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        starMaterial.uniforms.uScale.value = (window.innerHeight * Math.min(window.devicePixelRatio, 1.5)) / 2;
         if (reduced) renderer.render(scene, camera);
       };
       const onVisibility = () => {
@@ -528,15 +635,19 @@ export default function Globe3D() {
         window.removeEventListener("resize", onResize);
         document.removeEventListener("visibilitychange", onVisibility);
         window.removeEventListener("pointermove", onPointerMove);
-        meteors.forEach((m) => {
-          m.mat.dispose();
-          m.geo.dispose();
+        [...meteors, ...comets].forEach((m) => {
+          m.lineMat.dispose();
+          m.lineGeo.dispose();
+          m.headMat.dispose();
         });
         starMaterial.dispose();
+        satPanelMat.dispose();
+        asteroidBelt.mat.dispose();
+        kuiperBelt.mat.dispose();
+        flareSprites.forEach((f) => f.mat.dispose());
+        galaxies.forEach((g) => (g.material as import("three").SpriteMaterial).dispose());
         renderer.dispose();
         disposables.forEach((d) => d.dispose());
-        satPanelMat.dispose();
-        asteroidMat.dispose();
         container.removeChild(renderer.domElement);
       };
     })();
