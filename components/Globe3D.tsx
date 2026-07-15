@@ -53,16 +53,41 @@ export default function Globe3D() {
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      // Sunlight (creates a realistic day/night terminator across the sphere)
-      const sun = new THREE.DirectionalLight(0xffffff, 2.4);
-      sun.position.set(-4, 2, 4);
+      // Sunlight (creates a realistic day/night terminator across the sphere).
+      // Fixed in world space — the globe rotates under it, like the real thing.
+      const sun = new THREE.DirectionalLight(0xffffff, 2.8);
+      sun.position.set(4, 1.6, 2.5);
       scene.add(sun);
-      scene.add(new THREE.AmbientLight(0x3355aa, 0.35));
+      scene.add(new THREE.AmbientLight(0x4466bb, 0.42));
+
+      // Small moon, visible only when it's night in India right now
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0xd6dbe6, roughness: 0.9, metalness: 0 })
+      );
+      moon.position.set(-3.4, 2.1, -5.5);
+      scene.add(moon);
 
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
-      globeGroup.rotation.y = 2.4; // start facing a continent, not open ocean
       scene.add(globeGroup);
+
+      // Orient the globe so India faces the fixed sun (day) or faces away
+      // from it (night), matching the real clock in India right now (IST,
+      // UTC+5:30) — so opening the site in the morning shows a lit globe
+      // and opening it at night shows the dark side with city lights + moon.
+      const now = new Date();
+      const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60;
+      const istHour = (utcHours + 5.5) % 24;
+      const isDayInIndia = istHour >= 6 && istHour < 18;
+      moon.visible = !isDayInIndia;
+
+      const INDIA: [number, number] = [21, 78.96];
+      const indiaLocal = toVector3(INDIA[0], INDIA[1], 1, THREE);
+      const indiaAzimuth = Math.atan2(indiaLocal.x, indiaLocal.z);
+      const sunAzimuth = Math.atan2(sun.position.x, sun.position.z);
+      const targetAzimuth = isDayInIndia ? sunAzimuth : sunAzimuth + Math.PI;
+      globeGroup.rotation.y = targetAzimuth - indiaAzimuth;
 
       const sphereGeo = new THREE.SphereGeometry(1, 96, 96);
 
@@ -85,8 +110,8 @@ export default function Globe3D() {
             map: dayTex,
             emissiveMap: nightTex,
             emissive: new THREE.Color(0xffffff),
-            emissiveIntensity: 1.4,
-            roughness: 0.85,
+            emissiveIntensity: 1.5,
+            roughness: 0.75,
             metalness: 0,
           })
         );
@@ -245,6 +270,7 @@ export default function Globe3D() {
         sphereGeo.dispose();
         nodeGeo.dispose();
         starGeo.dispose();
+        moon.geometry.dispose();
         container.removeChild(renderer.domElement);
       };
     })();
