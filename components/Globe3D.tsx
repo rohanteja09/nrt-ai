@@ -325,7 +325,80 @@ export default function Globe3D() {
       const uranus = makePlanet(0.28, [7.35, 1.2, -20], track(planetTexture(THREE, [[0, "#c9f3ee"], [1, "#8fd0c9"]])));
       const neptune = makePlanet(0.27, [9.45, -0.6, -21], track(planetTexture(THREE, [[0, "#5b7fe0"], [1, "#2c3fa0"]])));
 
-      const orbitingPlanets = [mercury, venus, mars, jupiter, saturn, uranus, neptune];
+      const pluto = makePlanet(0.06, [11.5, 0.4, -24], track(planetTexture(THREE, [[0, "#cbb8a3"], [1, "#8a7867"]])));
+
+      const orbitingPlanets = [mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto];
+
+      // ---- Orbital motion: each body swings back and forth along a bounded
+      // arc of its own circular path around the Sun (not a full revolution —
+      // that would eventually swing some planets through the clear center
+      // zone). A full glowing ring shows the trajectory each swings along.
+      interface OrbitEntry {
+        object: import("three").Object3D;
+        baseAngle: number;
+        radius: number;
+        amplitude: number;
+        speed: number;
+        phase: number;
+      }
+      const orbits: OrbitEntry[] = [];
+      const orbitLineMat = track(
+        new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending })
+      );
+      function registerOrbit(object: import("three").Object3D, amplitude: number, speed: number) {
+        const relX = object.position.x - SUN_POS.x;
+        const relZ = object.position.z - SUN_POS.z;
+        const radius = Math.sqrt(relX * relX + relZ * relZ);
+        const baseAngle = Math.atan2(relZ, relX);
+        orbits.push({ object, baseAngle, radius, amplitude, speed, phase: Math.random() * Math.PI * 2 });
+
+        const segments = 96;
+        const pts: import("three").Vector3[] = [];
+        for (let i = 0; i <= segments; i++) {
+          const a = (i / segments) * Math.PI * 2;
+          pts.push(new THREE.Vector3(SUN_POS.x + Math.cos(a) * radius, object.position.y, SUN_POS.z + Math.sin(a) * radius));
+        }
+        const geo = track(new THREE.BufferGeometry().setFromPoints(pts));
+        scene.add(new THREE.LineLoop(geo, orbitLineMat));
+      }
+      registerOrbit(mercury, 0.35, 0.15);
+      registerOrbit(venus, 0.28, 0.11);
+      registerOrbit(earthGroup, 0.22, 0.08);
+      registerOrbit(mars, 0.18, 0.065);
+      registerOrbit(jupiter, 0.13, 0.045);
+      registerOrbit(saturn, 0.1, 0.035);
+      registerOrbit(uranus, 0.08, 0.028);
+      registerOrbit(neptune, 0.065, 0.022);
+      registerOrbit(pluto, 0.055, 0.018);
+
+      // ---- Aurora glow above Earth's pole, shimmering between green and cyan
+      const auroraMat = track(new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: `
+          varying vec2 vUv;
+          uniform float uTime;
+          void main() {
+            float d = distance(vUv, vec2(0.5));
+            float ring = smoothstep(0.5, 0.32, d) * smoothstep(0.14, 0.28, d);
+            float shimmer = 0.55 + 0.45 * sin(uTime * 2.2 + vUv.x * 12.0);
+            vec3 color = mix(vec3(0.25, 1.0, 0.6), vec3(0.3, 0.7, 1.0), sin(uTime + vUv.y * 6.0) * 0.5 + 0.5);
+            gl_FragColor = vec4(color, ring * shimmer * 0.75);
+          }`,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }));
+      const aurora = new THREE.Mesh(track(new THREE.RingGeometry(earthRadius * 1.05, earthRadius * 1.6, 48)), auroraMat);
+      aurora.rotation.x = -Math.PI / 2.3;
+      aurora.position.y = earthRadius * 0.35;
+      earthGroup.add(aurora);
 
       // ---- Asteroid belt between Mars and Jupiter, Kuiper belt beyond Neptune
       function makeBelt(count: number, xRange: [number, number], yRange: [number, number], z: number, color: number, sizeRange: [number, number]) {
@@ -365,59 +438,65 @@ export default function Globe3D() {
         return sprite;
       });
 
-      // ---- Starfield: stars all around, each with its own twinkle phase.
-      const starCount = 1800;
-      const starPositions = new Float32Array(starCount * 3);
-      const starPhases = new Float32Array(starCount);
-      for (let i = 0; i < starCount; i++) {
-        const r = 6 + Math.random() * 40;
-        const theta = Math.acos(2 * Math.random() - 1);
-        const phi = Math.random() * Math.PI * 2;
-        starPositions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
-        starPositions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
-        starPositions[i * 3 + 2] = r * Math.cos(theta);
-        starPhases[i] = Math.random() * Math.PI * 2;
+      // ---- Twinkling point field, shared by the starfield and the closer
+      // cosmic-dust layer. uScale mirrors what THREE.PointsMaterial computes
+      // internally (half the drawing-buffer height) so uSize behaves like a
+      // normal "world size" instead of a mystery constant that renders
+      // sub-pixel and effectively invisible.
+      function makeTwinkleField(count: number, radiusRange: [number, number], size: number, color: number, opacityFloor: number) {
+        const positions = new Float32Array(count * 3);
+        const phases = new Float32Array(count);
+        for (let i = 0; i < count; i++) {
+          const r = radiusRange[0] + Math.random() * (radiusRange[1] - radiusRange[0]);
+          const theta = Math.acos(2 * Math.random() - 1);
+          const phi = Math.random() * Math.PI * 2;
+          positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
+          positions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
+          positions[i * 3 + 2] = r * Math.cos(theta);
+          phases[i] = Math.random() * Math.PI * 2;
+        }
+        const geo = track(new THREE.BufferGeometry());
+        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute("phase", new THREE.BufferAttribute(phases, 1));
+        const material = new THREE.ShaderMaterial({
+          uniforms: {
+            uTime: { value: 0 },
+            uSize: { value: size },
+            uScale: { value: (window.innerHeight * Math.min(window.devicePixelRatio, 1.5)) / 2 },
+            uColor: { value: new THREE.Color(color) },
+          },
+          vertexShader: `
+            attribute float phase;
+            uniform float uTime;
+            uniform float uSize;
+            uniform float uScale;
+            varying float vTwinkle;
+            void main() {
+              vTwinkle = 0.5 + 0.5 * sin(uTime * 1.6 + phase);
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = uSize * (uScale / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          fragmentShader: `
+            uniform vec3 uColor;
+            varying float vTwinkle;
+            void main() {
+              float d = length(gl_PointCoord - vec2(0.5));
+              if (d > 0.5) discard;
+              gl_FragColor = vec4(uColor, (${opacityFloor.toFixed(2)} + ${(1 - opacityFloor).toFixed(2)} * vTwinkle) * (1.0 - d * 1.7));
+            }
+          `,
+          transparent: true,
+          depthWrite: false,
+        });
+        const points = new THREE.Points(geo, material);
+        scene.add(points);
+        return { points, material };
       }
-      const starGeo = track(new THREE.BufferGeometry());
-      starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
-      starGeo.setAttribute("phase", new THREE.BufferAttribute(starPhases, 1));
-      const starMaterial = new THREE.ShaderMaterial({
-        // uScale mirrors what THREE.PointsMaterial computes internally
-        // (half the drawing-buffer height) so uSize behaves like a normal
-        // "world size" instead of a mystery constant that renders sub-pixel.
-        uniforms: {
-          uTime: { value: 0 },
-          uSize: { value: 0.11 },
-          uScale: { value: (window.innerHeight * Math.min(window.devicePixelRatio, 1.5)) / 2 },
-          uColor: { value: new THREE.Color(0xdbeafe) },
-        },
-        vertexShader: `
-          attribute float phase;
-          uniform float uTime;
-          uniform float uSize;
-          uniform float uScale;
-          varying float vTwinkle;
-          void main() {
-            vTwinkle = 0.5 + 0.5 * sin(uTime * 1.6 + phase);
-            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = uSize * (uScale / -mvPosition.z);
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColor;
-          varying float vTwinkle;
-          void main() {
-            float d = length(gl_PointCoord - vec2(0.5));
-            if (d > 0.5) discard;
-            gl_FragColor = vec4(uColor, (0.45 + 0.55 * vTwinkle) * (1.0 - d * 1.7));
-          }
-        `,
-        transparent: true,
-        depthWrite: false,
-      });
-      const stars = new THREE.Points(starGeo, starMaterial);
-      scene.add(stars);
+
+      const { points: stars, material: starMaterial } = makeTwinkleField(1800, [6, 46], 0.11, 0xdbeafe, 0.45);
+      const { points: dust, material: dustMaterial } = makeTwinkleField(280, [2, 9], 0.045, 0xffe6b8, 0.3);
 
       // ---- Shooting stars (quick) and a comet (slower, bigger, brighter) —
       // both use a camera-facing glow sprite for the head so they're never
@@ -548,11 +627,23 @@ export default function Globe3D() {
         sunCore.rotation.y += dt * 0.01;
         stars.rotation.y += dt * 0.004;
         starMaterial.uniforms.uTime.value += dt;
+        dust.rotation.y += dt * 0.01;
+        dustMaterial.uniforms.uTime.value += dt;
+        auroraMat.uniforms.uTime.value += dt;
         asteroidBelt.mesh.rotation.y += dt * 0.01;
         kuiperBelt.mesh.rotation.y += dt * 0.006;
         satellites.forEach(({ pivot, craft, speed }) => {
           pivot.rotation.y += dt * speed;
           craft.lookAt(pivot.position);
+        });
+
+        // Each planet swings back and forth along its orbital ring, staying
+        // within a bounded arc so it never drifts into the clear center zone.
+        const elapsed = clock.elapsedTime;
+        orbits.forEach((o) => {
+          const angle = o.baseAngle + o.amplitude * Math.sin(elapsed * o.speed + o.phase);
+          o.object.position.x = SUN_POS.x + Math.cos(angle) * o.radius;
+          o.object.position.z = SUN_POS.z + Math.sin(angle) * o.radius;
         });
 
         flareSprites.forEach((f) => {
@@ -641,6 +732,7 @@ export default function Globe3D() {
           m.headMat.dispose();
         });
         starMaterial.dispose();
+        dustMaterial.dispose();
         satPanelMat.dispose();
         asteroidBelt.mat.dispose();
         kuiperBelt.mat.dispose();
