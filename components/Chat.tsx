@@ -12,6 +12,7 @@ import { SUGGEST_EVENT } from "./Footer";
 import UsageBar from "./UsageBar";
 import LimitToast from "./LimitToast";
 import type { Usage } from "@/lib/rateLimit";
+import { useVoiceInput } from "@/lib/useVoiceInput";
 
 interface ChatApiResponse {
   text?: string;
@@ -44,6 +45,13 @@ export default function Chat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const voiceBaseRef = useRef("");
+  const { supported: voiceSupported, listening, start: startVoice, stop: stopVoice } = useVoiceInput(
+    (transcript) => {
+      const base = voiceBaseRef.current;
+      setInput(`${base}${base && transcript ? " " : ""}${transcript}`);
+    }
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -290,6 +298,38 @@ export default function Chat() {
           >
             {"\u{1F4CE}"}
           </motion.button>
+          {voiceSupported && (
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.94 }}
+              disabled={awaitingFirstToken}
+              onClick={() => {
+                if (listening) {
+                  stopVoice();
+                } else {
+                  voiceBaseRef.current = input;
+                  startVoice();
+                }
+              }}
+              title={listening ? "Stop voice input" : "Speak your message"}
+              className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl disabled:opacity-30 ${
+                listening
+                  ? "text-red-500"
+                  : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              {listening && (
+                <span className="radar-ping">
+                  <span className="ring" />
+                  <span className="ring delay" />
+                </span>
+              )}
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="7" y="2.5" width="6" height="10" rx="3" />
+                <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M7 17.5h6" />
+              </svg>
+            </motion.button>
+          )}
           <textarea
             ref={textareaRef}
             value={input}
