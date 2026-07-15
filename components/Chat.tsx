@@ -211,7 +211,7 @@ export default function Chat() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="text-center"
+            className="rounded-2xl border border-white/50 bg-white/65 px-6 py-5 text-center shadow-sm backdrop-blur-md dark:border-white/5 dark:bg-zinc-950/55"
           >
             <h2 className="gradient-text text-3xl font-bold tracking-tight sm:text-4xl">
               What should we do today?

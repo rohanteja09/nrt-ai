@@ -5,7 +5,7 @@ import StatusBadge from "@/components/StatusBadge";
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col">
-      <header className="relative px-4 py-3 backdrop-blur-md">
+      <header className="relative border-b border-white/40 bg-white/60 px-4 py-3 backdrop-blur-md dark:border-white/5 dark:bg-zinc-950/50">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Logo size={32} />

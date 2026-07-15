@@ -35,10 +35,8 @@ export default function RootLayout({
           <div className="aurora-blob two" />
         </div>
         <Globe3D />
-        <div className="relative z-10 flex min-h-full flex-1 flex-col items-center px-3 py-4 sm:px-6 sm:py-6">
-          <div className="console-panel flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-2xl sm:rounded-3xl">
-            {children}
-          </div>
+        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+          {children}
           <Footer />
         </div>
       </body>
