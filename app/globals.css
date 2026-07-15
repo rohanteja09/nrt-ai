@@ -89,11 +89,22 @@ body {
 }
 
 @media (prefers-color-scheme: light) {
-  /* deeper stops so the headline stays readable on white */
+  /* deeper stops so the headline stays readable on the light hero card */
   .gradient-text {
     background-image: linear-gradient(90deg, #1e40af, #0c4a6e, #0e7490, #1e40af);
     background-size: 300% 100%;
   }
+}
+
+/* Always the bright variant — used where text sits directly on the dark
+   globe backdrop (e.g. the footer credit) regardless of page theme. */
+.gradient-text-bright {
+  background: linear-gradient(90deg, #60a5fa, #22d3ee, #60a5fa);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gradient-shift 6s ease-in-out infinite;
 }
 
 @keyframes gradient-shift {
@@ -145,17 +156,14 @@ body {
   display: block;
 }
 
-/* Soft vignette so the panel content stays comfortably readable */
+/* Soft vignette so the panel content stays comfortably readable — same
+   subtle dark falloff regardless of theme, since the globe image itself
+   is always dark and shouldn't be washed out near the header. */
 .globe-backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 35%, rgba(2, 6, 23, 0.35) 100%);
-}
-@media (prefers-color-scheme: light) {
-  .globe-backdrop::after {
-    background: radial-gradient(ellipse at center, transparent 30%, rgba(255, 255, 255, 0.55) 100%);
-  }
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(2, 6, 23, 0.4) 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -206,7 +206,7 @@ export default function Chat() {
   return (
     <div className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4">
       {isEmpty ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-24">
+        <div className="flex flex-1 flex-col items-center gap-6 pb-24 pt-8">
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}

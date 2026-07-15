@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 
 // Rough lat/lon of major hubs, used as endpoints for the glowing connection arcs.
@@ -52,11 +53,18 @@ export default function Globe3D() {
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
+      // Sunlight (creates a realistic day/night terminator across the sphere)
+      const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+      sun.position.set(-4, 2, 4);
+      scene.add(sun);
+      scene.add(new THREE.AmbientLight(0x3355aa, 0.35));
+
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
+      globeGroup.rotation.y = 2.4; // start facing a continent, not open ocean
       scene.add(globeGroup);
 
-      const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
+      const sphereGeo = new THREE.SphereGeometry(1, 96, 96);
 
       const placeholder = new THREE.Mesh(
         sphereGeo,
@@ -66,12 +74,37 @@ export default function Globe3D() {
 
       const loader = new THREE.TextureLoader();
       loader.setCrossOrigin("anonymous");
+      let dayTex: import("three").Texture | null = null;
+      let nightTex: import("three").Texture | null = null;
+
+      const tryBuildEarth = () => {
+        if (!dayTex || !nightTex || cancelled) return;
+        const earth = new THREE.Mesh(
+          sphereGeo,
+          new THREE.MeshStandardMaterial({
+            map: dayTex,
+            emissiveMap: nightTex,
+            emissive: new THREE.Color(0xffffff),
+            emissiveIntensity: 1.4,
+            roughness: 0.85,
+            metalness: 0,
+          })
+        );
+        globeGroup.add(earth);
+        placeholder.visible = false;
+      };
+
+      loader.load(DAY_TEXTURE, (tex) => {
+        if (cancelled) return;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        dayTex = tex;
+        tryBuildEarth();
+      });
       loader.load(NIGHT_TEXTURE, (tex) => {
         if (cancelled) return;
         tex.colorSpace = THREE.SRGBColorSpace;
-        const earth = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ map: tex }));
-        globeGroup.add(earth);
-        placeholder.visible = false;
+        nightTex = tex;
+        tryBuildEarth();
       });
 
       // Warm glowing arcs connecting hub cities, like flight/data routes
@@ -89,8 +122,8 @@ export default function Globe3D() {
         let b = HUBS[Math.floor(Math.random() * HUBS.length)];
         while (b === a) b = HUBS[Math.floor(Math.random() * HUBS.length)];
 
-        const start = toVector3(a[0], a[1], 1.005, THREE);
-        const end = toVector3(b[0], b[1], 1.005, THREE);
+        const start = toVector3(a[0], a[1], 1.006, THREE);
+        const end = toVector3(b[0], b[1], 1.006, THREE);
         const mid = start.clone().add(end).multiplyScalar(0.5);
         const arcHeight = 1 + start.distanceTo(end) * 0.35;
         mid.normalize().multiplyScalar(arcHeight);
@@ -104,7 +137,7 @@ export default function Globe3D() {
       // Glowing node points at the hub cities
       const nodePositions = new Float32Array(HUBS.length * 3);
       HUBS.forEach(([lat, lon], i) => {
-        const v = toVector3(lat, lon, 1.01, THREE);
+        const v = toVector3(lat, lon, 1.012, THREE);
         nodePositions[i * 3] = v.x;
         nodePositions[i * 3 + 1] = v.y;
         nodePositions[i * 3 + 2] = v.z;
@@ -173,7 +206,7 @@ export default function Globe3D() {
       function frame() {
         raf = requestAnimationFrame(frame);
         const dt = clock.getDelta();
-        globeGroup.rotation.y += dt * 0.045;
+        globeGroup.rotation.y += dt * 0.065;
         stars.rotation.y += dt * 0.004;
         renderer.render(scene, camera);
       }
