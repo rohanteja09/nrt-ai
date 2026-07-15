@@ -204,7 +204,11 @@ export default function Chat() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4">
+    <div
+      className={`relative mx-auto flex w-full flex-1 flex-col px-4 ${
+        isEmpty ? "max-w-5xl" : "max-w-2xl"
+      }`}
+    >
       {isEmpty ? (
         <div className="flex flex-1 flex-col justify-center pb-24">
           <div className="flex w-full flex-col items-center gap-6 text-center md:max-w-md md:items-start md:text-left">
@@ -252,7 +256,7 @@ export default function Chat() {
 
       <LimitToast message={toast} />
 
-      <div className="sticky bottom-0 pb-4 pt-2">
+      <div className="sticky bottom-0 mx-auto w-full max-w-2xl pb-4 pt-2">
         <UsageBar usage={usage} />
         {attachedImage && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-950/80">

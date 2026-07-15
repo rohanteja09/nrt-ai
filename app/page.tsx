@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-zinc-200/60 px-4 py-3 backdrop-blur-md dark:border-zinc-800/60">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Logo size={32} />
             <div>
