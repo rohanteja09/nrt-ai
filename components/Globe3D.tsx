@@ -102,8 +102,13 @@ export default function Globe3D() {
       const bgTexture = track(new THREE.CanvasTexture(bgCanvas));
       scene.background = bgTexture;
 
+      // Elevated 3/4 angle (not level with the orbital plane) so the orbit
+      // rings read as open ellipses, like looking down at a diagram, rather
+      // than edge-on as near-flat lines.
       const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.z = 2.15;
+      camera.position.set(0, 4.2, 2.15);
+      camera.lookAt(0, -1.3, -14);
+      const CAMERA_BASE_QUATERNION = camera.quaternion.clone();
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -113,10 +118,15 @@ export default function Globe3D() {
       // Sunlight — a fixed-direction light approximating rays from the Sun
       // mesh's position, so every planet is lit consistently from one side.
       const SUN_POS = new THREE.Vector3(-10.5, 2, -16);
-      const sunLight = new THREE.DirectionalLight(0xffffff, 2.8);
+      const sunLight = new THREE.DirectionalLight(0xffffff, 3.4);
       sunLight.position.copy(SUN_POS).normalize().multiplyScalar(4);
       scene.add(sunLight);
-      scene.add(new THREE.AmbientLight(0x4466bb, 0.38));
+      // Soft fill light from the opposite side so shadowed hemispheres read
+      // as dim, not pure black — plus a brighter ambient base overall.
+      const fillLight = new THREE.DirectionalLight(0x3b5bdb, 0.5);
+      fillLight.position.copy(SUN_POS).normalize().multiplyScalar(-4);
+      scene.add(fillLight);
+      scene.add(new THREE.AmbientLight(0x5577cc, 0.55));
 
       const commonSphereGeo = track(new THREE.SphereGeometry(1, 48, 48));
       const loader = new THREE.TextureLoader();
@@ -183,11 +193,35 @@ export default function Globe3D() {
       // for the chat UI, each lit by the fixed sun-direction light above.
       // Shows a plain color sphere until its real texture map finishes
       // loading, then swaps it in (same pattern as Earth's placeholder).
+      // A soft additive rim light on every planet (not just Earth) for that
+      // gently-glowing, premium-diagram look instead of a flat matte sphere.
+      const rimGlowGeo = track(new THREE.SphereGeometry(1.1, 32, 32));
+      const rimGlowMat = track(
+        new THREE.ShaderMaterial({
+          vertexShader: `
+            varying vec3 vNormal;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+          fragmentShader: `
+            varying vec3 vNormal;
+            void main() {
+              float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+              gl_FragColor = vec4(0.55, 0.7, 1.0, 1.0) * intensity;
+            }`,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          transparent: true,
+          depthWrite: false,
+        })
+      );
       function makePlanet(radius: number, position: [number, number, number], textureUrl: string, fallbackColor: number) {
-        const mat = track(new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: 1 }));
+        const mat = track(new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: 0.7 }));
         const mesh = new THREE.Mesh(commonSphereGeo, mat);
         mesh.scale.setScalar(radius);
         mesh.position.set(...position);
+        mesh.add(new THREE.Mesh(rimGlowGeo, rimGlowMat));
         scene.add(mesh);
         loadTexture(textureUrl, (tex) => {
           mat.map = tex;
@@ -197,8 +231,8 @@ export default function Globe3D() {
         return mesh;
       }
 
-      const mercury = makePlanet(0.1, [-8.05, 0.8, -15], PLANET_TEX.mercury, 0x8f8377);
-      const venus = makePlanet(0.16, [-5.95, -1.0, -15.5], PLANET_TEX.venus, 0xc9a86a);
+      const mercury = makePlanet(0.13, [-8.05, 0.8, -15], PLANET_TEX.mercury, 0x8f8377);
+      const venus = makePlanet(0.2, [-5.95, -1.0, -15.5], PLANET_TEX.venus, 0xc9a86a);
 
       // Earth keeps its day/night blend + a tiny moon, now scaled down as
       // one planet among many rather than the single hero of the scene.
@@ -206,7 +240,7 @@ export default function Globe3D() {
       earthGroup.position.set(-3.5, 1.3, -16);
       earthGroup.rotation.z = (23.4 * Math.PI) / 180;
       scene.add(earthGroup);
-      const earthRadius = 0.2;
+      const earthRadius = 0.24;
       const earthPlaceholder = new THREE.Mesh(
         commonSphereGeo,
         new THREE.MeshBasicMaterial({ color: 0x1e293b })
@@ -287,9 +321,9 @@ export default function Globe3D() {
       const targetAzimuth = isDayInIndia ? sunAzimuth : sunAzimuth + Math.PI;
       earthGroup.rotation.y = targetAzimuth - indiaAzimuth;
 
-      const mars = makePlanet(0.14, [-1.26, -1.4, -16.5], PLANET_TEX.mars, 0xb8492e);
-      const jupiter = makePlanet(0.55, [1.82, 1.6, -18], PLANET_TEX.jupiter, 0xc9a26b);
-      const saturn = makePlanet(0.46, [4.9, -1.0, -19], PLANET_TEX.saturn, 0xc9ac74);
+      const mars = makePlanet(0.18, [-1.26, -1.4, -16.5], PLANET_TEX.mars, 0xb8492e);
+      const jupiter = makePlanet(0.65, [1.82, 1.6, -18], PLANET_TEX.jupiter, 0xc9a26b);
+      const saturn = makePlanet(0.56, [4.9, -1.0, -19], PLANET_TEX.saturn, 0xc9ac74);
       const saturnRingMat = track(new THREE.MeshBasicMaterial({ color: 0xd8c396, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
       const saturnRing = new THREE.Mesh(track(new THREE.RingGeometry(0.62, 0.98, 64)), saturnRingMat);
       saturnRing.rotation.x = Math.PI / 2.4;
@@ -300,7 +334,7 @@ export default function Globe3D() {
         saturnRingMat.needsUpdate = true;
       });
 
-      const uranus = makePlanet(0.28, [7.35, 1.2, -20], PLANET_TEX.uranus, 0x8fd0c9);
+      const uranus = makePlanet(0.34, [7.35, 1.2, -20], PLANET_TEX.uranus, 0x8fd0c9);
       const uranusRing = new THREE.Mesh(
         track(new THREE.RingGeometry(0.4, 0.52, 48)),
         track(new THREE.MeshBasicMaterial({ color: 0xb9dfe0, transparent: true, opacity: 0.3, side: THREE.DoubleSide }))
@@ -308,8 +342,8 @@ export default function Globe3D() {
       uranusRing.rotation.z = Math.PI / 2.1; // Uranus's rings are nearly perpendicular to its orbit
       uranus.add(uranusRing);
 
-      const neptune = makePlanet(0.27, [9.45, -0.6, -21], PLANET_TEX.neptune, 0x2c3fa0);
-      const pluto = makePlanet(0.06, [11.5, 0.4, -24], PLANET_TEX.pluto, 0x8a7867);
+      const neptune = makePlanet(0.32, [9.45, -0.6, -21], PLANET_TEX.neptune, 0x2c3fa0);
+      const pluto = makePlanet(0.08, [11.5, 0.4, -24], PLANET_TEX.pluto, 0x8a7867);
 
       const orbitingPlanets = [mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto];
 
@@ -667,11 +701,13 @@ export default function Globe3D() {
         updateStreaks(comets, dt);
 
         if (hasFinePointer) {
-          cameraOffset.x += (pointer.x * 0.4 - cameraOffset.x) * Math.min(1, dt * 2.5);
-          cameraOffset.y += (-pointer.y * 0.25 - cameraOffset.y) * Math.min(1, dt * 2.5);
-          camera.position.x = cameraOffset.x;
-          camera.position.y = cameraOffset.y;
-          camera.lookAt(0, 0, -2);
+          // Rotational parallax: a small pan/tilt layered on top of the
+          // fixed elevated base orientation, instead of translating the
+          // camera and re-aiming it (which would undo the tilt every frame).
+          cameraOffset.x += (pointer.x * 0.05 - cameraOffset.x) * Math.min(1, dt * 2.5);
+          cameraOffset.y += (-pointer.y * 0.035 - cameraOffset.y) * Math.min(1, dt * 2.5);
+          const parallaxQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(cameraOffset.y, cameraOffset.x, 0, "YXZ"));
+          camera.quaternion.copy(CAMERA_BASE_QUATERNION).multiply(parallaxQuat);
         }
 
         renderer.render(scene, camera);
