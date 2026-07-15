@@ -106,9 +106,17 @@ export default function Globe3D() {
       // rings read as open ellipses, like looking down at a diagram, rather
       // than edge-on as near-flat lines.
       const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.set(0, 4.2, 2.15);
-      camera.lookAt(0, -1.3, -14);
-      const CAMERA_BASE_QUATERNION = camera.quaternion.clone();
+      const CAMERA_FINAL_POS = new THREE.Vector3(0, 4.2, 2.15);
+      const CAMERA_LOOK_TARGET = new THREE.Vector3(0, -1.3, -14);
+      // Opening shot: start far out so the whole solar system reads tiny in
+      // frame, then fly in to the resting position over INTRO_DURATION
+      // seconds (below, in frame()) — a cinematic establishing move.
+      const CAMERA_FLY_START = new THREE.Vector3(0, 16, 46);
+      const INTRO_DURATION = 2.6;
+      let introT = reduced ? 1 : 0;
+      camera.position.copy(reduced ? CAMERA_FINAL_POS : CAMERA_FLY_START);
+      camera.lookAt(CAMERA_LOOK_TARGET);
+      let CAMERA_BASE_QUATERNION = camera.quaternion.clone();
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -621,6 +629,41 @@ export default function Globe3D() {
         { incline: -18, twist: 55, radius: 1.85, speed: -0.11, scale: 0.8, color: 0xe2c9a0 },
         { incline: 60, twist: -30, radius: 1.4, speed: 0.26, scale: 0.65, color: 0xbcd4f0 },
       ];
+      // A short fading arc trailing behind each satellite's current position.
+      // Since it's a static shape parented to the same pivot the craft orbits
+      // on, it automatically reads as "trailing behind" in world space as the
+      // pivot rotates — no per-frame vertex updates needed.
+      function buildSatelliteTrail(radius: number, speedSign: number) {
+        const segments = 16;
+        const spread = 0.5; // radians the trail arc spans behind the craft
+        const points: import("three").Vector3[] = [];
+        for (let i = 0; i <= segments; i++) {
+          // Trails behind the direction of travel: the arc extends opposite
+          // the sign of the pivot's rotation speed.
+          const a = -speedSign * (i / segments) * spread;
+          points.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+        }
+        const geo = track(new THREE.BufferGeometry().setFromPoints(points));
+        const colors = new Float32Array((segments + 1) * 3);
+        for (let i = 0; i <= segments; i++) {
+          const b = 1 - i / segments;
+          colors[i * 3] = 0.55 * b;
+          colors[i * 3 + 1] = 0.72 * b;
+          colors[i * 3 + 2] = 1.0 * b;
+        }
+        geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        const mat = track(
+          new THREE.LineBasicMaterial({
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          })
+        );
+        return new THREE.Line(geo, mat);
+      }
+
       const satellites = satelliteConfigs.map((cfg) => {
         const pivot = new THREE.Group();
         pivot.rotation.x = THREE.MathUtils.degToRad(cfg.incline);
@@ -629,6 +672,7 @@ export default function Globe3D() {
         const craft = buildSatellite(cfg.scale, cfg.color);
         craft.position.set(cfg.radius, 0, 0);
         pivot.add(craft);
+        pivot.add(buildSatelliteTrail(cfg.radius, Math.sign(cfg.speed) || 1));
         return { pivot, craft, speed: cfg.speed };
       });
 
@@ -700,7 +744,15 @@ export default function Globe3D() {
         }
         updateStreaks(comets, dt);
 
-        if (hasFinePointer) {
+        if (introT < 1) {
+          // Ease-out cubic: fast at first, settling gently into the final
+          // framing rather than a mechanical linear glide.
+          introT = Math.min(1, introT + dt / INTRO_DURATION);
+          const eased = 1 - Math.pow(1 - introT, 3);
+          camera.position.lerpVectors(CAMERA_FLY_START, CAMERA_FINAL_POS, eased);
+          camera.lookAt(CAMERA_LOOK_TARGET);
+          CAMERA_BASE_QUATERNION = camera.quaternion.clone();
+        } else if (hasFinePointer) {
           // Rotational parallax: a small pan/tilt layered on top of the
           // fixed elevated base orientation, instead of translating the
           // camera and re-aiming it (which would undo the tilt every frame).

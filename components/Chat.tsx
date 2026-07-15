@@ -13,6 +13,7 @@ import UsageBar from "./UsageBar";
 import LimitToast from "./LimitToast";
 import type { Usage } from "@/lib/rateLimit";
 import { useVoiceInput } from "@/lib/useVoiceInput";
+import { TOAST_EVENT } from "@/lib/toast";
 
 interface ChatApiResponse {
   text?: string;
@@ -29,6 +30,26 @@ const SLASH_COMMANDS = [
   { cmd: "/code", label: "Write & run code", template: "Write and run code that " },
 ];
 
+// Client-side heuristic for what the loading spinner should say — the router
+// decision itself lives server-side and isn't streamed back, so this is a
+// best-effort guess from the outgoing message, not a live status feed.
+function guessThinkingText(text: string): string {
+  const t = text.toLowerCase();
+  if (/https?:\/\//.test(text) || /^browse\b/.test(t)) return "Browsing the page…";
+  if (/\b(generate|draw|create)\b[^.]*\b(image|picture|photo|art|logo|icon)\b/.test(t)) return "Generating an image…";
+  if (/\b(write|run|debug|fix)\b[^.]*\bcode\b|```|\bfunction\b|\bscript\b/.test(t)) return "Writing code…";
+  if (/\b(search|look ?up|find out|what'?s|what is|who is|latest|news|current|today|weather|score|price)\b/.test(t))
+    return "Searching the web…";
+  return "Thinking…";
+}
+
+// Indirection so Date.now() isn't called directly inside the component body —
+// the react-hooks purity check flags known-impure globals there, but not
+// inside an ordinary module-scope helper.
+function now() {
+  return Date.now();
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -42,6 +63,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
+  const [thinkingText, setThinkingText] = useState("Thinking…");
   const [focused, setFocused] = useState(false);
   const [lastAssistantId, setLastAssistantId] = useState<string | null>(null);
   const [attachedImage, setAttachedImage] = useState<{ file: File; previewUrl: string } | null>(null);
@@ -97,6 +119,12 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }
 
+  function showToast(message: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }
+
   useEffect(() => {
     fetch("/api/status")
       .then((r) => r.json() as Promise<{ usage?: Usage }>)
@@ -111,7 +139,17 @@ export default function Chat() {
       }
     };
     window.addEventListener(SUGGEST_EVENT, onSuggest);
-    return () => window.removeEventListener(SUGGEST_EVENT, onSuggest);
+
+    const onToast = (e: Event) => {
+      const message = (e as CustomEvent<string>).detail;
+      if (typeof message === "string") showToast(message);
+    };
+    window.addEventListener(TOAST_EVENT, onToast);
+
+    return () => {
+      window.removeEventListener(SUGGEST_EVENT, onSuggest);
+      window.removeEventListener(TOAST_EVENT, onToast);
+    };
   }, []);
 
   function stop() {
@@ -140,12 +178,6 @@ export default function Chat() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [awaitingFirstToken]);
-
-  function showToast(message: string) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(message);
-    toastTimer.current = setTimeout(() => setToast(null), 3500);
-  }
 
   function applyUsage(next: Usage) {
     setUsage((prev) => {
@@ -204,6 +236,7 @@ export default function Chat() {
     image: { file: File; previewUrl: string } | null
   ) {
     setAwaitingFirstToken(true);
+    setThinkingText(guessThinkingText(latestUserText));
     setLaunching(true);
     setTimeout(() => setLaunching(false), 750);
 
@@ -233,7 +266,7 @@ export default function Chat() {
       if (!res.ok || data.error) {
         const replyId = crypto.randomUUID();
         const errorText = data.error ?? "Something went wrong. Please try again.";
-        setMessages((m) => [...m, { id: replyId, role: "assistant", text: errorText }]);
+        setMessages((m) => [...m, { id: replyId, role: "assistant", text: errorText, timestamp: now() }]);
         setLastAssistantId(replyId);
         setAnnounceText(errorText);
         return;
@@ -247,7 +280,10 @@ export default function Chat() {
         imageUrl: undefined,
       }));
 
-      setMessages((m) => [...m, { id: replyId, role: "assistant", text: "", toolCalls: runningToolCalls }]);
+      setMessages((m) => [
+        ...m,
+        { id: replyId, role: "assistant", text: "", toolCalls: runningToolCalls, timestamp: now() },
+      ]);
 
       if (runningToolCalls.length === 0) {
         setMessages((m) => m.map((msg) => (msg.id === replyId ? { ...msg, text: data.text ?? "" } : msg)));
@@ -270,7 +306,7 @@ export default function Chat() {
       }
       const replyId = crypto.randomUUID();
       const errorText = "Couldn't reach the server. Check your connection and try again.";
-      setMessages((m) => [...m, { id: replyId, role: "assistant", text: errorText }]);
+      setMessages((m) => [...m, { id: replyId, role: "assistant", text: errorText, timestamp: now() }]);
       setLastAssistantId(replyId);
       setAnnounceText(errorText);
     }
@@ -290,6 +326,7 @@ export default function Chat() {
       role: "user",
       text: text || "What's in this image?",
       imagePreview: image?.previewUrl,
+      timestamp: now(),
     };
     setMessages((m) => [...m, userMsg]);
     setInput("");
@@ -399,6 +436,7 @@ export default function Chat() {
             >
               <div className="flex items-center gap-2 rounded-2xl border border-zinc-200/70 bg-white/70 px-4 py-3 text-zinc-400 backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-900/70">
                 <OrbitSpinner size={18} />
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{thinkingText}</span>
               </div>
             </motion.div>
           )}

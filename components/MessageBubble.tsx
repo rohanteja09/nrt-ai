@@ -22,6 +22,9 @@ export default function MessageBubble({
   // Markdown structure (fences, lists) breaks mid-animation, so only animate plain prose.
   const isPlainProse = !isUser && !/[`*#\[\|]/.test(message.text);
   const shownText = useTypewriter(message.text, animateText && isPlainProse);
+  const timeLabel = message.timestamp
+    ? new Date(message.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : null;
 
   return (
     <motion.div
@@ -83,6 +86,15 @@ export default function MessageBubble({
           ) : (
             <Markdown text={message.text} />
           ))}
+        {timeLabel && (
+          <div
+            className={`mt-1 text-[10px] font-medium ${
+              isUser ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-400 dark:text-zinc-500"
+            }`}
+          >
+            {timeLabel}
+          </div>
+        )}
       </div>
     </motion.div>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { showToast } from "@/lib/toast";
 
 export default function CopyButton({ text, className = "" }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -10,6 +11,7 @@ export default function CopyButton({ text, className = "" }: { text: string; cla
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      showToast("Copied to clipboard");
       setTimeout(() => setCopied(false), 1600);
     } catch {
       // clipboard API unavailable — silently ignore

@@ -15,4 +15,5 @@ export interface ChatMessage {
   text: string;
   toolCalls?: ToolCall[];
   imagePreview?: string;
+  timestamp?: number;
 }

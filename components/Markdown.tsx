@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CodeSandbox from "./CodeSandbox";
 import CopyButton from "./CopyButton";
+import HighlightedCode from "./HighlightedCode";
 
 function extractText(node: React.ReactNode): string {
   if (typeof node === "string") return node;
@@ -34,9 +35,7 @@ export default function Markdown({ text }: { text: string }) {
             }
             return (
               <div className="group relative">
-                <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
-                  <code>{code}</code>
-                </pre>
+                <HighlightedCode code={code} lang={lang} />
                 <CopyButton text={code} className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
             );

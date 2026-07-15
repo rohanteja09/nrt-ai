@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import CopyButton from "./CopyButton";
+import HighlightedCode from "./HighlightedCode";
 
 export default function CodeSandbox({ code }: { code: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -59,9 +60,7 @@ export default function CodeSandbox({ code }: { code: string }) {
           </motion.button>
         </div>
       </div>
-      <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-2.5 text-xs text-zinc-100">
-        <code>{code}</code>
-      </pre>
+      <HighlightedCode code={code} lang="javascript" />
       {output.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
