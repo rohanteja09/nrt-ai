@@ -148,7 +148,7 @@ async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"i
 export async function runAgent(
   env: CloudflareEnv,
   history: { role: "user" | "assistant"; content: string }[],
-  ip: string,
+  visitor: string,
   image?: { dataUrl: string; question: string }
 ): Promise<AgentResult> {
   if (image) {
@@ -224,7 +224,7 @@ export async function runAgent(
           status: "done",
         };
       } else if (call.name === "generate_image") {
-        const allowed = await checkImageLimit(env.RATE_LIMIT_KV, ip);
+        const allowed = await checkImageLimit(env.RATE_LIMIT_KV, visitor);
         if (!allowed) {
           output = "Image generation daily limit reached for this visitor. Try again tomorrow.";
           tc = {

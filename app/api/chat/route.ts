@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { runAgent } from "@/lib/agent";
-import { checkChatLimit, getUsage } from "@/lib/rateLimit";
+import { checkChatLimit, getUsage, visitorKey } from "@/lib/rateLimit";
 import { isQuotaError, markQuotaExhausted, QUOTA_MESSAGE } from "@/lib/quota";
 
 interface ChatRequestBody {
@@ -24,9 +24,11 @@ export async function POST(req: Request) {
   }
 
   const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
-  const allowed = await checkChatLimit(env.RATE_LIMIT_KV, ip);
+  const deviceId = req.headers.get("x-nrt-device");
+  const visitor = visitorKey(ip, deviceId);
+  const allowed = await checkChatLimit(env.RATE_LIMIT_KV, visitor);
   if (!allowed) {
-    const usage = await getUsage(env.RATE_LIMIT_KV, ip);
+    const usage = await getUsage(env.RATE_LIMIT_KV, visitor);
     return Response.json(
       { error: "Daily free-tier limit reached for this visitor. Please try again tomorrow.", usage },
       { status: 429 }
@@ -34,8 +36,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await runAgent(env, messages, ip, image);
-    const usage = await getUsage(env.RATE_LIMIT_KV, ip);
+    const result = await runAgent(env, messages, visitor, image);
+    const usage = await getUsage(env.RATE_LIMIT_KV, visitor);
     return Response.json({ ...result, usage });
   } catch (err) {
     console.error(err);

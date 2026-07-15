@@ -20,18 +20,28 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function checkChatLimit(kv: KVNamespace, ip: string): Promise<boolean> {
-  return bump(kv, `chat:${ip}:${today()}`, DAILY_CHAT_LIMIT);
+// IP alone under-counts distinct visitors behind shared NAT (same WiFi,
+// carrier-grade NAT on mobile networks, offices) — everyone there gets one
+// pooled quota. Folding in a client-generated device ID (persisted in
+// localStorage, sent as the x-nrt-device header) gives each browser its own
+// bucket while still falling back to pure-IP grouping if the header is
+// absent, so older/no-JS clients degrade to the previous shared behavior.
+export function visitorKey(ip: string, deviceId: string | null): string {
+  return deviceId ? `${ip}:${deviceId}` : ip;
 }
 
-export async function checkImageLimit(kv: KVNamespace, ip: string): Promise<boolean> {
-  return bump(kv, `image:${ip}:${today()}`, DAILY_IMAGE_LIMIT);
+export async function checkChatLimit(kv: KVNamespace, visitor: string): Promise<boolean> {
+  return bump(kv, `chat:${visitor}:${today()}`, DAILY_CHAT_LIMIT);
 }
 
-export async function getUsage(kv: KVNamespace, ip: string): Promise<Usage> {
+export async function checkImageLimit(kv: KVNamespace, visitor: string): Promise<boolean> {
+  return bump(kv, `image:${visitor}:${today()}`, DAILY_IMAGE_LIMIT);
+}
+
+export async function getUsage(kv: KVNamespace, visitor: string): Promise<Usage> {
   const [chat, image] = await Promise.all([
-    kv.get(`chat:${ip}:${today()}`),
-    kv.get(`image:${ip}:${today()}`),
+    kv.get(`chat:${visitor}:${today()}`),
+    kv.get(`image:${visitor}:${today()}`),
   ]);
   const chatUsed = chat ? parseInt(chat, 10) : 0;
   const imageUsed = image ? parseInt(image, 10) : 0;

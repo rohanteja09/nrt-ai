@@ -14,6 +14,7 @@ import LimitToast from "./LimitToast";
 import type { Usage } from "@/lib/rateLimit";
 import { useVoiceInput } from "@/lib/useVoiceInput";
 import { TOAST_EVENT } from "@/lib/toast";
+import { getDeviceId } from "@/lib/deviceId";
 
 interface ChatApiResponse {
   text?: string;
@@ -126,7 +127,7 @@ export default function Chat() {
   }
 
   useEffect(() => {
-    fetch("/api/status")
+    fetch("/api/status", { headers: { "x-nrt-device": getDeviceId() } })
       .then((r) => r.json() as Promise<{ usage?: Usage }>)
       .then((d) => d.usage && setUsage(d.usage))
       .catch(() => {});
@@ -250,7 +251,7 @@ export default function Chat() {
       abortRef.current = controller;
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-nrt-device": getDeviceId() },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
