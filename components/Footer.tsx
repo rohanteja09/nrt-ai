@@ -68,7 +68,7 @@ export default function Footer() {
                 window.dispatchEvent(new CustomEvent(SUGGEST_EVENT, { detail: c.prompt }))
               }
               title={`Try: ${c.prompt}`}
-              className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur-sm transition-colors hover:border-blue-300/60 hover:bg-black/50 hover:text-white"
+              className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur-sm transition-colors hover:border-blue-300/60 hover:bg-black/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
             >
               <motion.span whileHover={{ rotate: [0, -12, 12, 0] }} transition={{ duration: 0.4 }}>
                 <c.Icon />

@@ -74,7 +74,7 @@ export default function SuggestionChips({ onPick }: { onPick: (text: string) => 
           whileHover={{ x: 6, scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => onPick(s.text)}
-          className="group flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-white/85 px-3.5 py-2.5 text-left shadow-sm backdrop-blur-sm transition-colors hover:border-blue-400/70 dark:border-zinc-800/80 dark:bg-zinc-950/85 dark:hover:border-blue-600/70"
+          className="group flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-white/85 px-3.5 py-2.5 text-left shadow-sm backdrop-blur-sm transition-colors hover:border-blue-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800/80 dark:bg-zinc-950/85 dark:hover:border-blue-600/70"
         >
           <span
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${s.ring} shadow-sm`}

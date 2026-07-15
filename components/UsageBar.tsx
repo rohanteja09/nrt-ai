@@ -1,6 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import type { Usage } from "@/lib/rateLimit";
+
+function AnimatedNumber({ value }: { value: number }) {
+  const mv = useMotionValue(value);
+  const rounded = useTransform(mv, (v) => Math.round(v).toString());
+
+  useEffect(() => {
+    const controls = animate(mv, value, { duration: 0.6, ease: "easeOut" });
+    return controls.stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return <motion.span>{rounded}</motion.span>;
+}
 
 function ChatIcon() {
   return (
@@ -44,7 +59,7 @@ function Meter({
           {label}
         </span>
         <span className="text-[10px] font-semibold tabular-nums text-white">
-          {left}/{limit}
+          <AnimatedNumber value={left} />/{limit}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15">

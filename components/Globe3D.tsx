@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
@@ -56,6 +56,7 @@ function planetTexture(THREE: typeof import("three"), stops: [number, string][])
 
 export default function Globe3D() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -246,9 +247,11 @@ export default function Globe3D() {
       );
       scene.add(atmosphere);
 
-      // Starfield — stars all around, so rotating the view never reveals a gap
+      // Starfield — stars all around (so rotating the view never reveals a
+      // gap), each with its own random twinkle phase driven by a shader.
       const starCount = 1800;
       const starPositions = new Float32Array(starCount * 3);
+      const starPhases = new Float32Array(starCount);
       for (let i = 0; i < starCount; i++) {
         const r = 6 + Math.random() * 40;
         const theta = Math.acos(2 * Math.random() - 1);
@@ -256,14 +259,92 @@ export default function Globe3D() {
         starPositions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
         starPositions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
         starPositions[i * 3 + 2] = r * Math.cos(theta);
+        starPhases[i] = Math.random() * Math.PI * 2;
       }
       const starGeo = track(new THREE.BufferGeometry());
       starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
-      const stars = new THREE.Points(
-        starGeo,
-        new THREE.PointsMaterial({ color: 0xbfdbfe, size: 0.045, transparent: true, opacity: 0.85, depthWrite: false })
-      );
+      starGeo.setAttribute("phase", new THREE.BufferAttribute(starPhases, 1));
+      const starMaterial = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uSize: { value: 16 }, uColor: { value: new THREE.Color(0xbfdbfe) } },
+        vertexShader: `
+          attribute float phase;
+          uniform float uTime;
+          uniform float uSize;
+          varying float vTwinkle;
+          void main() {
+            vTwinkle = 0.5 + 0.5 * sin(uTime * 1.6 + phase);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = uSize * (1.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          varying float vTwinkle;
+          void main() {
+            float d = length(gl_PointCoord - vec2(0.5));
+            if (d > 0.5) discard;
+            gl_FragColor = vec4(uColor, (0.35 + 0.65 * vTwinkle) * (1.0 - d * 1.7));
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+      });
+      const stars = new THREE.Points(starGeo, starMaterial);
       scene.add(stars);
+
+      // Occasional shooting star: a short streak that crosses the field and fades.
+      interface Meteor {
+        group: import("three").Group;
+        mat: import("three").LineBasicMaterial;
+        geo: import("three").BufferGeometry;
+        start: import("three").Vector3;
+        dir: import("three").Vector3;
+        t: number;
+        duration: number;
+      }
+      const meteors: Meteor[] = [];
+      let meteorCooldown = 3 + Math.random() * 5;
+      function spawnMeteor() {
+        const r = 13 + Math.random() * 5;
+        const theta = Math.acos(2 * Math.random() - 1);
+        const phi = Math.random() * Math.PI * 2;
+        const start = new THREE.Vector3(
+          r * Math.sin(theta) * Math.cos(phi),
+          r * Math.sin(theta) * Math.sin(phi),
+          r * Math.cos(theta)
+        );
+        const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.3 - 0.6, Math.random() - 0.5).normalize();
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          dir.clone().multiplyScalar(-1.3),
+        ]);
+        const mat = new THREE.LineBasicMaterial({
+          color: 0xe0f2fe,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+        });
+        const group = new THREE.Group();
+        group.add(new THREE.Line(geo, mat));
+        group.position.copy(start);
+        scene.add(group);
+        meteors.push({ group, mat, geo, start, dir, t: 0, duration: 1 + Math.random() * 0.6 });
+      }
+
+      // Subtle mouse-parallax: the camera drifts a little toward the cursor
+      // and always re-centers on the globe, so the scene feels responsive
+      // rather than a static loop. Disabled on touch-only devices.
+      const pointer = { x: 0, y: 0 };
+      const cameraOffset = { x: 0, y: 0 };
+      const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+      const onPointerMove = (e: PointerEvent) => {
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+      };
+      if (hasFinePointer && !reduced) {
+        window.addEventListener("pointermove", onPointerMove);
+      }
 
       // ---- Satellites: a few small craft, each on its own tilted orbital
       // plane fixed in world space, circling independently of the globe's spin.
@@ -366,20 +447,6 @@ export default function Globe3D() {
       ringedPlanet.add(ring);
       scene.add(ringedPlanet);
 
-      // Subtle mouse-parallax: the camera drifts a little toward the cursor
-      // and always re-centers on the globe, so the scene feels responsive
-      // rather than a static loop. Disabled on touch-only devices.
-      const pointer = { x: 0, y: 0 };
-      const cameraOffset = { x: 0, y: 0 };
-      const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
-      const onPointerMove = (e: PointerEvent) => {
-        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-        pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
-      };
-      if (hasFinePointer && !reduced) {
-        window.addEventListener("pointermove", onPointerMove);
-      }
-
       const clock = new THREE.Clock();
       let raf = 0;
       let running = false;
@@ -389,6 +456,7 @@ export default function Globe3D() {
         const dt = clock.getDelta();
         globeGroup.rotation.y += dt * 0.065;
         stars.rotation.y += dt * 0.004;
+        starMaterial.uniforms.uTime.value += dt;
         asteroidBelt.rotation.y += dt * 0.012;
         mars.rotation.y += dt * 0.02;
         ringedPlanet.rotation.y += dt * 0.015;
@@ -396,6 +464,26 @@ export default function Globe3D() {
           pivot.rotation.y += dt * speed;
           craft.lookAt(pivot.position);
         });
+
+        meteorCooldown -= dt;
+        if (meteorCooldown <= 0 && meteors.length < 1) {
+          spawnMeteor();
+          meteorCooldown = 4 + Math.random() * 7;
+        }
+        for (let i = meteors.length - 1; i >= 0; i--) {
+          const m = meteors[i];
+          m.t += dt;
+          const p = m.t / m.duration;
+          if (p >= 1) {
+            scene.remove(m.group);
+            m.mat.dispose();
+            m.geo.dispose();
+            meteors.splice(i, 1);
+            continue;
+          }
+          m.group.position.copy(m.start).addScaledVector(m.dir, p * 7);
+          m.mat.opacity = p < 0.12 ? p / 0.12 : p > 0.65 ? Math.max(0, (1 - p) / 0.35) : 1;
+        }
 
         if (hasFinePointer) {
           cameraOffset.x += (pointer.x * 0.35 - cameraOffset.x) * Math.min(1, dt * 2.5);
@@ -420,6 +508,7 @@ export default function Globe3D() {
 
       if (reduced) renderer.render(scene, camera);
       else start();
+      setReady(true);
 
       const onResize = () => {
         camera.aspect = window.innerWidth / window.innerHeight;
@@ -439,6 +528,11 @@ export default function Globe3D() {
         window.removeEventListener("resize", onResize);
         document.removeEventListener("visibilitychange", onVisibility);
         window.removeEventListener("pointermove", onPointerMove);
+        meteors.forEach((m) => {
+          m.mat.dispose();
+          m.geo.dispose();
+        });
+        starMaterial.dispose();
         renderer.dispose();
         disposables.forEach((d) => d.dispose());
         satPanelMat.dispose();
@@ -453,5 +547,10 @@ export default function Globe3D() {
     };
   }, []);
 
-  return <div ref={containerRef} className="globe-backdrop" aria-hidden="true" />;
+  return (
+    <div className="globe-backdrop" aria-hidden="true">
+      <div ref={containerRef} className="absolute inset-0" />
+      <div className={`globe-placeholder ${ready ? "globe-placeholder-hidden" : ""}`} />
+    </div>
+  );
 }

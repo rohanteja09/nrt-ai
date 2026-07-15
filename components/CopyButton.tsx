@@ -22,7 +22,7 @@ export default function CopyButton({ text, className = "" }: { text: string; cla
       whileTap={{ scale: 0.92 }}
       onClick={handleCopy}
       title={copied ? "Copied!" : "Copy code"}
-      className={`flex items-center gap-1 rounded-md bg-zinc-800/80 px-1.5 py-1 text-[10px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-zinc-700 hover:text-white ${className}`}
+      className={`flex items-center gap-1 rounded-md bg-zinc-800/80 px-1.5 py-1 text-[10px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-zinc-700 hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${className}`}
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (

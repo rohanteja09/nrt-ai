@@ -11,10 +11,12 @@ export default function MessageBubble({
   message,
   animateText,
   onEdit,
+  onRegenerate,
 }: {
   message: ChatMessage;
   animateText: boolean;
   onEdit?: () => void;
+  onRegenerate?: () => void;
 }) {
   const isUser = message.role === "user";
   // Markdown structure (fences, lists) breaks mid-animation, so only animate plain prose.
@@ -38,10 +40,23 @@ export default function MessageBubble({
           onClick={onEdit}
           title="Edit this message and resend"
           aria-label="Edit message"
-          className="rounded-lg p-1.5 text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+          className="rounded-lg p-1.5 text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 group-hover:opacity-100 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
         >
           <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor">
             <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-8.5 8.5a1 1 0 0 1-.44.256l-3 .857a.5.5 0 0 1-.618-.618l.857-3a1 1 0 0 1 .256-.44l8.617-8.383z" />
+          </svg>
+        </button>
+      )}
+      {!isUser && onRegenerate && (
+        <button
+          onClick={onRegenerate}
+          title="Regenerate this response"
+          aria-label="Regenerate response"
+          className="order-last rounded-lg p-1.5 text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 group-hover:opacity-100 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+        >
+          <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 10a6 6 0 0 1 10.5-4M16 10a6 6 0 0 1-10.5 4" />
+            <path d="M14 3v3.5h-3.5M6 17v-3.5h3.5" />
           </svg>
         </button>
       )}
