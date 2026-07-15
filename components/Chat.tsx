@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MessageBubble from "./MessageBubble";
 import SuggestionChips from "./SuggestionChips";
+import SpaceEvents from "./SpaceEvents";
 import OrbitSpinner from "./OrbitSpinner";
 import type { ChatMessage, ToolCall } from "@/lib/types";
 
@@ -375,6 +376,7 @@ export default function Chat() {
             </p>
           </motion.div>
           <SuggestionChips onPick={(t) => send(t)} />
+          <SpaceEvents />
         </div>
       ) : (
         <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6">

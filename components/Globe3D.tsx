@@ -5,6 +5,21 @@ import { useEffect, useRef, useState } from "react";
 const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 
+// Real (MIT-licensed) texture maps, CDN-hosted — https://github.com/kdaimiel/solar-system
+const TEX_BASE = "https://cdn.jsdelivr.net/npm/solar-system@0.1.46/demo/img";
+const PLANET_TEX = {
+  sun: `${TEX_BASE}/sun/sunmap.jpg`,
+  mercury: `${TEX_BASE}/mercury/mercurymap.jpg`,
+  venus: `${TEX_BASE}/venus/venusmap.jpg`,
+  mars: `${TEX_BASE}/mars/mars_1k_color.jpg`,
+  jupiter: `${TEX_BASE}/jupiter/jupitermap.jpg`,
+  saturn: `${TEX_BASE}/saturn/saturnmap.jpg`,
+  saturnRing: `${TEX_BASE}/saturn/saturnringcolor.jpg`,
+  uranus: `${TEX_BASE}/uranus/uranusmap.jpg`,
+  neptune: `${TEX_BASE}/neptune/neptunemap.jpg`,
+  pluto: `${TEX_BASE}/pluto/plutomap2k.jpg`,
+};
+
 function toVector3(lat: number, lon: number, radius: number, THREE: typeof import("three")) {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -13,65 +28,6 @@ function toVector3(lat: number, lon: number, radius: number, THREE: typeof impor
     radius * Math.cos(phi),
     radius * Math.sin(phi) * Math.sin(theta)
   );
-}
-
-/** Simple gradient-with-noise sphere texture, generated on a canvas — no network request. */
-function planetTexture(THREE: typeof import("three"), stops: [number, string][], bands = false) {
-  const c = document.createElement("canvas");
-  c.width = 256;
-  c.height = 128;
-  const ctx = c.getContext("2d")!;
-  const grad = ctx.createLinearGradient(0, 0, 0, 128);
-  stops.forEach(([offset, color]) => grad.addColorStop(offset, color));
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 256, 128);
-
-  if (bands) {
-    // horizontal storm bands for gas giants
-    for (let i = 0; i < 10; i++) {
-      const y = (i / 10) * 128 + Math.random() * 4;
-      ctx.globalAlpha = 0.12 + Math.random() * 0.15;
-      ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#000000";
-      ctx.fillRect(0, y, 256, 4 + Math.random() * 5);
-    }
-  }
-  ctx.globalAlpha = 0.15;
-  for (let i = 0; i < 50; i++) {
-    ctx.fillStyle = i % 2 === 0 ? "#000000" : "#ffffff";
-    const r = 2 + Math.random() * 6;
-    ctx.beginPath();
-    ctx.arc(Math.random() * 256, Math.random() * 128, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-/** Jupiter needs its Great Red Spot on top of the banded gradient. */
-function jupiterTexture(THREE: typeof import("three")) {
-  const tex = planetTexture(
-    THREE,
-    [
-      [0, "#e8d2a8"],
-      [0.35, "#c9a26b"],
-      [0.5, "#a9744a"],
-      [0.65, "#c9a26b"],
-      [1, "#8a6238"],
-    ],
-    true
-  );
-  const ctx = (tex.image as HTMLCanvasElement).getContext("2d")!;
-  const grsGrad = ctx.createRadialGradient(190, 78, 2, 190, 78, 16);
-  grsGrad.addColorStop(0, "#c1512f");
-  grsGrad.addColorStop(1, "rgba(193,81,47,0)");
-  ctx.fillStyle = grsGrad;
-  ctx.beginPath();
-  ctx.ellipse(190, 78, 16, 9, 0, 0, Math.PI * 2);
-  ctx.fill();
-  tex.needsUpdate = true;
-  return tex;
 }
 
 /** Soft radial glow sprite texture (comet heads, sun corona flares, distant galaxies). */
@@ -163,15 +119,27 @@ export default function Globe3D() {
       scene.add(new THREE.AmbientLight(0x4466bb, 0.38));
 
       const commonSphereGeo = track(new THREE.SphereGeometry(1, 48, 48));
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin("anonymous");
+      function loadTexture(url: string, onReady: (tex: import("three").Texture) => void) {
+        loader.load(url, (tex) => {
+          if (cancelled) return;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          onReady(tex);
+        });
+      }
 
       // ---- The Sun: emissive core + additive corona + occasional flare bursts
       const sunGroup = new THREE.Group();
       sunGroup.position.copy(SUN_POS);
       scene.add(sunGroup);
-      const sunCore = new THREE.Mesh(
-        commonSphereGeo,
-        new THREE.MeshBasicMaterial({ color: 0xfff4d6 })
-      );
+      const sunMat = track(new THREE.MeshBasicMaterial({ color: 0xfff4d6 }));
+      const sunCore = new THREE.Mesh(commonSphereGeo, sunMat);
+      loadTexture(PLANET_TEX.sun, (tex) => {
+        sunMat.map = tex;
+        sunMat.color.set(0xffffff);
+        sunMat.needsUpdate = true;
+      });
       sunCore.scale.setScalar(1.3);
       sunGroup.add(sunCore);
       const sunCorona = new THREE.Mesh(
@@ -213,16 +181,24 @@ export default function Globe3D() {
 
       // ---- Planets, spread wide left-to-right so the center stays clear
       // for the chat UI, each lit by the fixed sun-direction light above.
-      function makePlanet(radius: number, position: [number, number, number], tex: import("three").Texture) {
-        const mesh = new THREE.Mesh(commonSphereGeo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+      // Shows a plain color sphere until its real texture map finishes
+      // loading, then swaps it in (same pattern as Earth's placeholder).
+      function makePlanet(radius: number, position: [number, number, number], textureUrl: string, fallbackColor: number) {
+        const mat = track(new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: 1 }));
+        const mesh = new THREE.Mesh(commonSphereGeo, mat);
         mesh.scale.setScalar(radius);
         mesh.position.set(...position);
         scene.add(mesh);
+        loadTexture(textureUrl, (tex) => {
+          mat.map = tex;
+          mat.color.set(0xffffff);
+          mat.needsUpdate = true;
+        });
         return mesh;
       }
 
-      const mercury = makePlanet(0.1, [-8.05, 0.8, -15], track(planetTexture(THREE, [[0, "#b9ada0"], [1, "#7c7166"]])));
-      const venus = makePlanet(0.16, [-5.95, -1.0, -15.5], track(planetTexture(THREE, [[0, "#f3e2b3"], [1, "#c9a86a"]])));
+      const mercury = makePlanet(0.1, [-8.05, 0.8, -15], PLANET_TEX.mercury, 0x8f8377);
+      const venus = makePlanet(0.16, [-5.95, -1.0, -15.5], PLANET_TEX.venus, 0xc9a86a);
 
       // Earth keeps its day/night blend + a tiny moon, now scaled down as
       // one planet among many rather than the single hero of the scene.
@@ -266,8 +242,6 @@ export default function Globe3D() {
       moon.position.set(earthRadius * 2.1, earthRadius * 0.6, 0);
       earthGroup.add(moon);
 
-      const loader = new THREE.TextureLoader();
-      loader.setCrossOrigin("anonymous");
       let dayTex: import("three").Texture | null = null;
       let nightTex: import("three").Texture | null = null;
       const tryBuildEarth = () => {
@@ -313,19 +287,29 @@ export default function Globe3D() {
       const targetAzimuth = isDayInIndia ? sunAzimuth : sunAzimuth + Math.PI;
       earthGroup.rotation.y = targetAzimuth - indiaAzimuth;
 
-      const mars = makePlanet(0.14, [-1.26, -1.4, -16.5], track(planetTexture(THREE, [[0, "#e2795a"], [0.5, "#b8492e"], [1, "#7a2c1c"]])));
-      const jupiter = makePlanet(0.55, [1.82, 1.6, -18], track(jupiterTexture(THREE)));
-      const saturn = makePlanet(0.46, [4.9, -1.0, -19], track(planetTexture(THREE, [[0, "#e8d5a8"], [0.5, "#c9ac74"], [1, "#8a6f45"]])));
-      const saturnRing = new THREE.Mesh(
-        track(new THREE.RingGeometry(0.62, 0.98, 64)),
-        new THREE.MeshBasicMaterial({ color: 0xd8c396, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
-      );
+      const mars = makePlanet(0.14, [-1.26, -1.4, -16.5], PLANET_TEX.mars, 0xb8492e);
+      const jupiter = makePlanet(0.55, [1.82, 1.6, -18], PLANET_TEX.jupiter, 0xc9a26b);
+      const saturn = makePlanet(0.46, [4.9, -1.0, -19], PLANET_TEX.saturn, 0xc9ac74);
+      const saturnRingMat = track(new THREE.MeshBasicMaterial({ color: 0xd8c396, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+      const saturnRing = new THREE.Mesh(track(new THREE.RingGeometry(0.62, 0.98, 64)), saturnRingMat);
       saturnRing.rotation.x = Math.PI / 2.4;
       saturn.add(saturnRing);
-      const uranus = makePlanet(0.28, [7.35, 1.2, -20], track(planetTexture(THREE, [[0, "#c9f3ee"], [1, "#8fd0c9"]])));
-      const neptune = makePlanet(0.27, [9.45, -0.6, -21], track(planetTexture(THREE, [[0, "#5b7fe0"], [1, "#2c3fa0"]])));
+      loadTexture(PLANET_TEX.saturnRing, (tex) => {
+        saturnRingMat.map = tex;
+        saturnRingMat.color.set(0xffffff);
+        saturnRingMat.needsUpdate = true;
+      });
 
-      const pluto = makePlanet(0.06, [11.5, 0.4, -24], track(planetTexture(THREE, [[0, "#cbb8a3"], [1, "#8a7867"]])));
+      const uranus = makePlanet(0.28, [7.35, 1.2, -20], PLANET_TEX.uranus, 0x8fd0c9);
+      const uranusRing = new THREE.Mesh(
+        track(new THREE.RingGeometry(0.4, 0.52, 48)),
+        track(new THREE.MeshBasicMaterial({ color: 0xb9dfe0, transparent: true, opacity: 0.3, side: THREE.DoubleSide }))
+      );
+      uranusRing.rotation.z = Math.PI / 2.1; // Uranus's rings are nearly perpendicular to its orbit
+      uranus.add(uranusRing);
+
+      const neptune = makePlanet(0.27, [9.45, -0.6, -21], PLANET_TEX.neptune, 0x2c3fa0);
+      const pluto = makePlanet(0.06, [11.5, 0.4, -24], PLANET_TEX.pluto, 0x8a7867);
 
       const orbitingPlanets = [mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto];
 
