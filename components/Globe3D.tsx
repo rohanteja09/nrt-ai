@@ -2,14 +2,10 @@
 
 import { useEffect, useRef } from "react";
 
-const TEXTURES = {
-  dark: "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg",
-  light: "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg",
-};
+const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 
 export default function Globe3D() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -19,23 +15,18 @@ export default function Globe3D() {
     (async () => {
       const THREE = await import("three");
       const container = containerRef.current;
-      const panel = panelRef.current;
-      if (cancelled || !container || !panel) return;
-
-      const size = () => panel.getBoundingClientRect();
-      const initial = size();
+      if (cancelled || !container) return;
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(45, initial.width / initial.height, 0.1, 100);
-      camera.position.z = 2.7;
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.z = 2.2;
 
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      renderer.setSize(initial.width, initial.height);
+      renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-
+      // Earth (always the dramatic night-lights look, tilted like the real planet)
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
       scene.add(globeGroup);
@@ -44,13 +35,13 @@ export default function Globe3D() {
 
       const wire = new THREE.Mesh(
         sphereGeo,
-        new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.25 })
+        new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.2 })
       );
       globeGroup.add(wire);
 
       const loader = new THREE.TextureLoader();
       loader.setCrossOrigin("anonymous");
-      loader.load(TEXTURES[dark ? "dark" : "light"], (tex) => {
+      loader.load(NIGHT_TEXTURE, (tex) => {
         if (cancelled) return;
         tex.colorSpace = THREE.SRGBColorSpace;
         const earth = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ map: tex }));
@@ -58,6 +49,36 @@ export default function Globe3D() {
         wire.visible = false;
       });
 
+      // Geodesic network-mesh overlay (the "global data grid" look), rotating independently
+      const networkGroup = new THREE.Group();
+      globeGroup.add(networkGroup);
+      const netGeo = new THREE.IcosahedronGeometry(1.012, 3);
+      const network = new THREE.LineSegments(
+        new THREE.WireframeGeometry(netGeo),
+        new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.32 })
+      );
+      networkGroup.add(network);
+
+      // Glowing node points at a subset of the mesh vertices ("city" nodes)
+      const vertexPositions = netGeo.getAttribute("position");
+      const nodeCount = Math.min(90, vertexPositions.count);
+      const nodePositions = new Float32Array(nodeCount * 3);
+      const step = Math.floor(vertexPositions.count / nodeCount);
+      for (let i = 0; i < nodeCount; i++) {
+        const vi = i * step;
+        nodePositions[i * 3] = vertexPositions.getX(vi) * 1.014;
+        nodePositions[i * 3 + 1] = vertexPositions.getY(vi) * 1.014;
+        nodePositions[i * 3 + 2] = vertexPositions.getZ(vi) * 1.014;
+      }
+      const nodeGeo = new THREE.BufferGeometry();
+      nodeGeo.setAttribute("position", new THREE.BufferAttribute(nodePositions, 3));
+      const nodes = new THREE.Points(
+        nodeGeo,
+        new THREE.PointsMaterial({ color: 0x67e8f9, size: 0.02, transparent: true, opacity: 0.9 })
+      );
+      networkGroup.add(nodes);
+
+      // Atmosphere rim glow
       const atmosphere = new THREE.Mesh(
         new THREE.SphereGeometry(1.16, 64, 64),
         new THREE.ShaderMaterial({
@@ -71,7 +92,7 @@ export default function Globe3D() {
             varying vec3 vNormal;
             void main() {
               float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-              gl_FragColor = vec4(0.13, 0.83, 0.93, 1.0) * intensity;
+              gl_FragColor = vec4(0.16, 0.71, 0.93, 1.0) * intensity;
             }`,
           blending: THREE.AdditiveBlending,
           side: THREE.BackSide,
@@ -81,10 +102,11 @@ export default function Globe3D() {
       );
       scene.add(atmosphere);
 
-      const starCount = 220;
+      // Starfield
+      const starCount = 1100;
       const positions = new Float32Array(starCount * 3);
       for (let i = 0; i < starCount; i++) {
-        const r = 6 + Math.random() * 4;
+        const r = 20 + Math.random() * 25;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = Math.random() * Math.PI * 2;
         positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
@@ -95,13 +117,7 @@ export default function Globe3D() {
       starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const stars = new THREE.Points(
         starGeo,
-        new THREE.PointsMaterial({
-          color: 0x67e8f9,
-          size: 0.045,
-          transparent: true,
-          opacity: dark ? 0.9 : 0.5,
-          depthWrite: false,
-        })
+        new THREE.PointsMaterial({ color: 0x93c5fd, size: 0.055, transparent: true, opacity: 0.8, depthWrite: false })
       );
       scene.add(stars);
 
@@ -112,8 +128,9 @@ export default function Globe3D() {
       function frame() {
         raf = requestAnimationFrame(frame);
         const dt = clock.getDelta();
-        globeGroup.rotation.y += dt * 0.09;
-        stars.rotation.y += dt * 0.006;
+        globeGroup.rotation.y += dt * 0.05;
+        networkGroup.rotation.y += dt * 0.018;
+        stars.rotation.y += dt * 0.004;
         renderer.render(scene, camera);
       }
       function start() {
@@ -130,28 +147,27 @@ export default function Globe3D() {
       if (reduced) renderer.render(scene, camera);
       else start();
 
-      const ro = new ResizeObserver(() => {
-        const { width, height } = size();
-        if (width === 0 || height === 0) return;
-        camera.aspect = width / height;
+      const onResize = () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
+        renderer.setSize(window.innerWidth, window.innerHeight);
         if (reduced) renderer.render(scene, camera);
-      });
-      ro.observe(panel);
-
+      };
       const onVisibility = () => {
         if (document.hidden) pause();
         else if (!reduced) start();
       };
+      window.addEventListener("resize", onResize);
       document.addEventListener("visibilitychange", onVisibility);
 
       cleanup = () => {
         pause();
-        ro.disconnect();
+        window.removeEventListener("resize", onResize);
         document.removeEventListener("visibilitychange", onVisibility);
         renderer.dispose();
         sphereGeo.dispose();
+        netGeo.dispose();
+        nodeGeo.dispose();
         starGeo.dispose();
         container.removeChild(renderer.domElement);
       };
@@ -164,18 +180,16 @@ export default function Globe3D() {
   }, []);
 
   return (
-    <div className="hud-globe" aria-hidden="true">
-      <div ref={panelRef} className="hud-globe-frame">
-        <div ref={containerRef} className="hud-globe-canvas" />
-        <span className="hud-corner tl" />
-        <span className="hud-corner tr" />
-        <span className="hud-corner bl" />
-        <span className="hud-corner br" />
-        <div className="hud-scanline" />
-        <div className="hud-label">
-          <span className="hud-dot" />
-          EARTH&nbsp;·&nbsp;LIVE
-        </div>
+    <div className="hud-viewport" aria-hidden="true">
+      <div ref={containerRef} className="hud-globe-canvas" />
+      <span className="hud-corner tl" />
+      <span className="hud-corner tr" />
+      <span className="hud-corner bl" />
+      <span className="hud-corner br" />
+      <div className="hud-scanline" />
+      <div className="hud-label">
+        <span className="hud-dot" />
+        EARTH&nbsp;·&nbsp;LIVE
       </div>
     </div>
   );
