@@ -45,10 +45,25 @@ export default function Globe3D() {
       if (cancelled || !container) return;
 
       const scene = new THREE.Scene();
+
+      // Deep-space background (radial gradient) so no page background ever
+      // shows through the gaps between stars — solid space, not white/gray.
+      const bgCanvas = document.createElement("canvas");
+      bgCanvas.width = bgCanvas.height = 512;
+      const bgCtx = bgCanvas.getContext("2d")!;
+      const grad = bgCtx.createRadialGradient(256, 220, 40, 256, 256, 380);
+      grad.addColorStop(0, "#0b1330");
+      grad.addColorStop(0.55, "#04070f");
+      grad.addColorStop(1, "#000103");
+      bgCtx.fillStyle = grad;
+      bgCtx.fillRect(0, 0, 512, 512);
+      const bgTexture = new THREE.CanvasTexture(bgCanvas);
+      scene.background = bgTexture;
+
       const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
       camera.position.z = 2.15;
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
@@ -205,24 +220,61 @@ export default function Globe3D() {
       );
       scene.add(atmosphere);
 
-      // Starfield
-      const starCount = 900;
+      // Starfield — stars all around, so rotating the view never reveals a gap
+      const starCount = 1800;
       const positions = new Float32Array(starCount * 3);
       for (let i = 0; i < starCount; i++) {
-        const r = 20 + Math.random() * 25;
+        const r = 6 + Math.random() * 40;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = Math.random() * Math.PI * 2;
         positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
         positions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
-        positions[i * 3 + 2] = -Math.abs(r * Math.cos(theta));
+        positions[i * 3 + 2] = r * Math.cos(theta);
       }
       const starGeo = new THREE.BufferGeometry();
       starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const stars = new THREE.Points(
         starGeo,
-        new THREE.PointsMaterial({ color: 0x93c5fd, size: 0.05, transparent: true, opacity: 0.7, depthWrite: false })
+        new THREE.PointsMaterial({ color: 0xbfdbfe, size: 0.045, transparent: true, opacity: 0.85, depthWrite: false })
       );
       scene.add(stars);
+
+      // Orbiting satellite: a tilted orbital plane fixed in world space, with
+      // the satellite mesh circling it independently of the globe's own spin.
+      const orbitPivot = new THREE.Group();
+      orbitPivot.rotation.x = THREE.MathUtils.degToRad(32);
+      orbitPivot.rotation.z = THREE.MathUtils.degToRad(8);
+      scene.add(orbitPivot);
+
+      const satellite = new THREE.Group();
+      const bodyGeo = new THREE.BoxGeometry(0.045, 0.045, 0.07);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.4, metalness: 0.6 });
+      satellite.add(new THREE.Mesh(bodyGeo, bodyMat));
+
+      const panelGeo = new THREE.BoxGeometry(0.16, 0.005, 0.05);
+      const panelMat = new THREE.MeshStandardMaterial({
+        color: 0x1d4ed8,
+        emissive: 0x3b82f6,
+        emissiveIntensity: 0.5,
+        roughness: 0.3,
+        metalness: 0.2,
+      });
+      const panelL = new THREE.Mesh(panelGeo, panelMat);
+      panelL.position.x = -0.11;
+      const panelR = new THREE.Mesh(panelGeo, panelMat);
+      panelR.position.x = 0.11;
+      satellite.add(panelL, panelR);
+
+      const dishGeo = new THREE.ConeGeometry(0.02, 0.025, 12);
+      const dishMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.5, metalness: 0.4 });
+      const dish = new THREE.Mesh(dishGeo, dishMat);
+      dish.position.z = 0.045;
+      dish.rotation.x = Math.PI / 2;
+      satellite.add(dish);
+
+      const satelliteRadius = 1.55;
+      satellite.position.set(satelliteRadius, 0, 0);
+      orbitPivot.add(satellite);
 
       const clock = new THREE.Clock();
       let raf = 0;
@@ -233,6 +285,8 @@ export default function Globe3D() {
         const dt = clock.getDelta();
         globeGroup.rotation.y += dt * 0.065;
         stars.rotation.y += dt * 0.004;
+        orbitPivot.rotation.y += dt * 0.18;
+        satellite.lookAt(orbitPivot.position);
         renderer.render(scene, camera);
       }
       function start() {
@@ -271,6 +325,13 @@ export default function Globe3D() {
         nodeGeo.dispose();
         starGeo.dispose();
         moon.geometry.dispose();
+        bodyGeo.dispose();
+        bodyMat.dispose();
+        panelGeo.dispose();
+        panelMat.dispose();
+        dishGeo.dispose();
+        dishMat.dispose();
+        bgTexture.dispose();
         container.removeChild(renderer.domElement);
       };
     })();
