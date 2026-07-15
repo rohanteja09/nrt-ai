@@ -19,6 +19,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Generate Cloudflare binding types
+        run: npm run cf-typegen
+
       - name: Type check
         run: npm run typecheck
 
