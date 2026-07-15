@@ -204,28 +204,23 @@ export default function Chat() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div
-      className={`relative mx-auto flex w-full flex-1 flex-col px-4 ${
-        isEmpty ? "max-w-5xl" : "max-w-2xl"
-      }`}
-    >
+    <div className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4">
       {isEmpty ? (
-        <div className="flex flex-1 flex-col justify-center pb-24">
-          <div className="flex w-full flex-col items-center gap-6 text-center md:max-w-md md:items-start md:text-left">
-            <motion.div
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            >
-              <h2 className="gradient-text text-3xl font-bold tracking-tight sm:text-4xl">
-                What should we do today?
-              </h2>
-              <p className="mt-3 text-sm font-medium leading-relaxed text-zinc-700 dark:text-zinc-300">
-                Chat, search the web, browse pages, generate images, and run code — all in one place.
-              </p>
-            </motion.div>
-            <SuggestionChips onPick={(t) => send(t)} />
-          </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="text-center"
+          >
+            <h2 className="gradient-text text-3xl font-bold tracking-tight sm:text-4xl">
+              What should we do today?
+            </h2>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-zinc-700 dark:text-zinc-300">
+              Chat, search the web, browse pages, generate images, and run code — all in one place.
+            </p>
+          </motion.div>
+          <SuggestionChips onPick={(t) => send(t)} />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto py-6">
@@ -256,7 +251,7 @@ export default function Chat() {
 
       <LimitToast message={toast} />
 
-      <div className="sticky bottom-0 mx-auto w-full max-w-2xl pb-4 pt-2">
+      <div className="sticky bottom-0 pb-4 pt-2">
         <UsageBar usage={usage} />
         {attachedImage && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-950/80">

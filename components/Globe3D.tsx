@@ -8,7 +8,8 @@ const TEXTURES = {
 };
 
 export default function Globe3D() {
-  const ref = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -17,42 +18,33 @@ export default function Globe3D() {
 
     (async () => {
       const THREE = await import("three");
-      const container = ref.current;
-      if (cancelled || !container) return;
+      const container = containerRef.current;
+      const panel = panelRef.current;
+      if (cancelled || !container || !panel) return;
+
+      const size = () => panel.getBoundingClientRect();
+      const initial = size();
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.z = 3.1;
+      const camera = new THREE.PerspectiveCamera(45, initial.width / initial.height, 0.1, 100);
+      camera.position.z = 2.7;
 
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(initial.width, initial.height);
       container.appendChild(renderer.domElement);
 
       const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-      // World group so the planet can sit beside the content on wide screens
-      const world = new THREE.Group();
-      scene.add(world);
-
-      // Earth (axially tilted like the real one)
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
-      world.add(globeGroup);
-
-      const updateOffset = () => {
-        const wide = window.innerWidth >= 768;
-        world.position.x = wide ? 1.2 : 0;
-        world.position.y = wide ? 0 : -0.5;
-      };
-      updateOffset();
+      scene.add(globeGroup);
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      // Wireframe placeholder shown until the texture arrives (and kept as fallback)
       const wire = new THREE.Mesh(
         sphereGeo,
-        new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.07 })
+        new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.25 })
       );
       globeGroup.add(wire);
 
@@ -66,9 +58,8 @@ export default function Globe3D() {
         wire.visible = false;
       });
 
-      // Atmosphere rim glow
       const atmosphere = new THREE.Mesh(
-        new THREE.SphereGeometry(1.13, 64, 64),
+        new THREE.SphereGeometry(1.16, 64, 64),
         new THREE.ShaderMaterial({
           vertexShader: `
             varying vec3 vNormal;
@@ -80,7 +71,7 @@ export default function Globe3D() {
             varying vec3 vNormal;
             void main() {
               float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-              gl_FragColor = vec4(0.23, 0.51, 0.96, 1.0) * intensity;
+              gl_FragColor = vec4(0.13, 0.83, 0.93, 1.0) * intensity;
             }`,
           blending: THREE.AdditiveBlending,
           side: THREE.BackSide,
@@ -88,13 +79,12 @@ export default function Globe3D() {
           depthWrite: false,
         })
       );
-      world.add(atmosphere);
+      scene.add(atmosphere);
 
-      // Starfield behind the globe
-      const starCount = 700;
+      const starCount = 220;
       const positions = new Float32Array(starCount * 3);
       for (let i = 0; i < starCount; i++) {
-        const r = 30 + Math.random() * 20;
+        const r = 6 + Math.random() * 4;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = Math.random() * Math.PI * 2;
         positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
@@ -106,10 +96,10 @@ export default function Globe3D() {
       const stars = new THREE.Points(
         starGeo,
         new THREE.PointsMaterial({
-          color: 0x93c5fd,
-          size: 0.07,
+          color: 0x67e8f9,
+          size: 0.045,
           transparent: true,
-          opacity: dark ? 0.8 : 0.4,
+          opacity: dark ? 0.9 : 0.5,
           depthWrite: false,
         })
       );
@@ -122,11 +112,10 @@ export default function Globe3D() {
       function frame() {
         raf = requestAnimationFrame(frame);
         const dt = clock.getDelta();
-        globeGroup.rotation.y += dt * 0.055;
-        stars.rotation.y += dt * 0.004;
+        globeGroup.rotation.y += dt * 0.09;
+        stars.rotation.y += dt * 0.006;
         renderer.render(scene, camera);
       }
-
       function start() {
         if (running) return;
         running = true;
@@ -138,29 +127,28 @@ export default function Globe3D() {
         cancelAnimationFrame(raf);
       }
 
-      if (reduced) {
-        renderer.render(scene, camera);
-      } else {
-        start();
-      }
+      if (reduced) renderer.render(scene, camera);
+      else start();
 
-      const onResize = () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+      const ro = new ResizeObserver(() => {
+        const { width, height } = size();
+        if (width === 0 || height === 0) return;
+        camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        updateOffset();
+        renderer.setSize(width, height);
         if (reduced) renderer.render(scene, camera);
-      };
+      });
+      ro.observe(panel);
+
       const onVisibility = () => {
         if (document.hidden) pause();
         else if (!reduced) start();
       };
-      window.addEventListener("resize", onResize);
       document.addEventListener("visibilitychange", onVisibility);
 
       cleanup = () => {
         pause();
-        window.removeEventListener("resize", onResize);
+        ro.disconnect();
         document.removeEventListener("visibilitychange", onVisibility);
         renderer.dispose();
         sphereGeo.dispose();
@@ -175,5 +163,20 @@ export default function Globe3D() {
     };
   }, []);
 
-  return <div ref={ref} className="globe3d" aria-hidden="true" />;
+  return (
+    <div className="hud-globe" aria-hidden="true">
+      <div ref={panelRef} className="hud-globe-frame">
+        <div ref={containerRef} className="hud-globe-canvas" />
+        <span className="hud-corner tl" />
+        <span className="hud-corner tr" />
+        <span className="hud-corner bl" />
+        <span className="hud-corner br" />
+        <div className="hud-scanline" />
+        <div className="hud-label">
+          <span className="hud-dot" />
+          EARTH&nbsp;·&nbsp;LIVE
+        </div>
+      </div>
+    </div>
+  );
 }
