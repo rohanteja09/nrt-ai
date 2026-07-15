@@ -11,8 +11,8 @@ export default function Home() {
             <Logo size={32} />
             <div>
               <h1 className="text-base font-semibold tracking-tight">NRT AI</h1>
-              <p className="font-mono text-[10px] tracking-wide text-zinc-500 dark:text-zinc-400">
-                CHAT · BROWSE · CODE · SEE · CREATE
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Chat &middot; Browse &middot; Code &middot; See &middot; Create
               </p>
             </div>
           </div>

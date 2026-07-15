@@ -4,6 +4,32 @@ import { useEffect, useRef } from "react";
 
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 
+// Rough lat/lon of major hubs, used as endpoints for the glowing connection arcs.
+const HUBS: [number, number][] = [
+  [37.77, -122.42], // San Francisco
+  [40.71, -74.0], // New York
+  [51.51, -0.13], // London
+  [48.85, 2.35], // Paris
+  [35.68, 139.69], // Tokyo
+  [1.35, 103.82], // Singapore
+  [19.08, 72.88], // Mumbai
+  [-33.87, 151.21], // Sydney
+  [55.76, 37.62], // Moscow
+  [-23.55, -46.63], // Sao Paulo
+  [25.2, 55.27], // Dubai
+  [13.09, 80.27], // Chennai
+];
+
+function toVector3(lat: number, lon: number, radius: number, THREE: typeof import("three")) {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
 export default function Globe3D() {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -19,25 +45,24 @@ export default function Globe3D() {
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.z = 2.2;
+      camera.position.z = 2.15;
 
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      // Earth (always the dramatic night-lights look, tilted like the real planet)
       const globeGroup = new THREE.Group();
       globeGroup.rotation.z = (23.4 * Math.PI) / 180;
       scene.add(globeGroup);
 
       const sphereGeo = new THREE.SphereGeometry(1, 64, 64);
 
-      const wire = new THREE.Mesh(
+      const placeholder = new THREE.Mesh(
         sphereGeo,
-        new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.2 })
+        new THREE.MeshBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.9 })
       );
-      globeGroup.add(wire);
+      globeGroup.add(placeholder);
 
       const loader = new THREE.TextureLoader();
       loader.setCrossOrigin("anonymous");
@@ -46,41 +71,61 @@ export default function Globe3D() {
         tex.colorSpace = THREE.SRGBColorSpace;
         const earth = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ map: tex }));
         globeGroup.add(earth);
-        wire.visible = false;
+        placeholder.visible = false;
       });
 
-      // Geodesic network-mesh overlay (the "global data grid" look), rotating independently
-      const networkGroup = new THREE.Group();
-      globeGroup.add(networkGroup);
-      const netGeo = new THREE.IcosahedronGeometry(1.012, 3);
-      const network = new THREE.LineSegments(
-        new THREE.WireframeGeometry(netGeo),
-        new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.32 })
-      );
-      networkGroup.add(network);
+      // Warm glowing arcs connecting hub cities, like flight/data routes
+      const arcsGroup = new THREE.Group();
+      globeGroup.add(arcsGroup);
+      const arcMaterial = new THREE.LineBasicMaterial({
+        color: 0xfbbf24,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+      });
+      const arcCount = 16;
+      for (let i = 0; i < arcCount; i++) {
+        const a = HUBS[Math.floor(Math.random() * HUBS.length)];
+        let b = HUBS[Math.floor(Math.random() * HUBS.length)];
+        while (b === a) b = HUBS[Math.floor(Math.random() * HUBS.length)];
 
-      // Glowing node points at a subset of the mesh vertices ("city" nodes)
-      const vertexPositions = netGeo.getAttribute("position");
-      const nodeCount = Math.min(90, vertexPositions.count);
-      const nodePositions = new Float32Array(nodeCount * 3);
-      const step = Math.floor(vertexPositions.count / nodeCount);
-      for (let i = 0; i < nodeCount; i++) {
-        const vi = i * step;
-        nodePositions[i * 3] = vertexPositions.getX(vi) * 1.014;
-        nodePositions[i * 3 + 1] = vertexPositions.getY(vi) * 1.014;
-        nodePositions[i * 3 + 2] = vertexPositions.getZ(vi) * 1.014;
+        const start = toVector3(a[0], a[1], 1.005, THREE);
+        const end = toVector3(b[0], b[1], 1.005, THREE);
+        const mid = start.clone().add(end).multiplyScalar(0.5);
+        const arcHeight = 1 + start.distanceTo(end) * 0.35;
+        mid.normalize().multiplyScalar(arcHeight);
+
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const points = curve.getPoints(48);
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        arcsGroup.add(new THREE.Line(geo, arcMaterial));
       }
+
+      // Glowing node points at the hub cities
+      const nodePositions = new Float32Array(HUBS.length * 3);
+      HUBS.forEach(([lat, lon], i) => {
+        const v = toVector3(lat, lon, 1.01, THREE);
+        nodePositions[i * 3] = v.x;
+        nodePositions[i * 3 + 1] = v.y;
+        nodePositions[i * 3 + 2] = v.z;
+      });
       const nodeGeo = new THREE.BufferGeometry();
       nodeGeo.setAttribute("position", new THREE.BufferAttribute(nodePositions, 3));
       const nodes = new THREE.Points(
         nodeGeo,
-        new THREE.PointsMaterial({ color: 0x67e8f9, size: 0.02, transparent: true, opacity: 0.9 })
+        new THREE.PointsMaterial({
+          color: 0xfcd34d,
+          size: 0.022,
+          transparent: true,
+          opacity: 0.95,
+          blending: THREE.AdditiveBlending,
+        })
       );
-      networkGroup.add(nodes);
+      arcsGroup.add(nodes);
 
       // Atmosphere rim glow
       const atmosphere = new THREE.Mesh(
-        new THREE.SphereGeometry(1.16, 64, 64),
+        new THREE.SphereGeometry(1.15, 64, 64),
         new THREE.ShaderMaterial({
           vertexShader: `
             varying vec3 vNormal;
@@ -91,8 +136,8 @@ export default function Globe3D() {
           fragmentShader: `
             varying vec3 vNormal;
             void main() {
-              float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-              gl_FragColor = vec4(0.16, 0.71, 0.93, 1.0) * intensity;
+              float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+              gl_FragColor = vec4(0.35, 0.55, 0.98, 1.0) * intensity;
             }`,
           blending: THREE.AdditiveBlending,
           side: THREE.BackSide,
@@ -103,7 +148,7 @@ export default function Globe3D() {
       scene.add(atmosphere);
 
       // Starfield
-      const starCount = 1100;
+      const starCount = 900;
       const positions = new Float32Array(starCount * 3);
       for (let i = 0; i < starCount; i++) {
         const r = 20 + Math.random() * 25;
@@ -117,7 +162,7 @@ export default function Globe3D() {
       starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const stars = new THREE.Points(
         starGeo,
-        new THREE.PointsMaterial({ color: 0x93c5fd, size: 0.055, transparent: true, opacity: 0.8, depthWrite: false })
+        new THREE.PointsMaterial({ color: 0x93c5fd, size: 0.05, transparent: true, opacity: 0.7, depthWrite: false })
       );
       scene.add(stars);
 
@@ -128,8 +173,7 @@ export default function Globe3D() {
       function frame() {
         raf = requestAnimationFrame(frame);
         const dt = clock.getDelta();
-        globeGroup.rotation.y += dt * 0.05;
-        networkGroup.rotation.y += dt * 0.018;
+        globeGroup.rotation.y += dt * 0.045;
         stars.rotation.y += dt * 0.004;
         renderer.render(scene, camera);
       }
@@ -166,7 +210,6 @@ export default function Globe3D() {
         document.removeEventListener("visibilitychange", onVisibility);
         renderer.dispose();
         sphereGeo.dispose();
-        netGeo.dispose();
         nodeGeo.dispose();
         starGeo.dispose();
         container.removeChild(renderer.domElement);
@@ -179,18 +222,5 @@ export default function Globe3D() {
     };
   }, []);
 
-  return (
-    <div className="hud-viewport" aria-hidden="true">
-      <div ref={containerRef} className="hud-globe-canvas" />
-      <span className="hud-corner tl" />
-      <span className="hud-corner tr" />
-      <span className="hud-corner bl" />
-      <span className="hud-corner br" />
-      <div className="hud-scanline" />
-      <div className="hud-label">
-        <span className="hud-dot" />
-        EARTH&nbsp;·&nbsp;LIVE
-      </div>
-    </div>
-  );
+  return <div ref={containerRef} className="globe-backdrop" aria-hidden="true" />;
 }

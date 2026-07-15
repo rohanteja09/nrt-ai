@@ -43,14 +43,9 @@ export default function MessageBubble({
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
           isUser
             ? "bg-gradient-to-br from-zinc-900 to-zinc-700 text-zinc-50 dark:from-zinc-100 dark:to-zinc-300 dark:text-zinc-900"
-            : "border-l-2 border-y border-r border-y-zinc-200/70 border-r-zinc-200/70 border-l-cyan-400 bg-white/70 text-zinc-900 shadow-[-2px_0_10px_-4px_rgba(34,211,238,0.4)] backdrop-blur-sm dark:border-y-zinc-800/70 dark:border-r-zinc-800/70 dark:bg-zinc-900/70 dark:text-zinc-100"
+            : "border border-zinc-200/70 bg-white/80 text-zinc-900 backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-100"
         }`}
       >
-        {!isUser && (
-          <div className="mb-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
-            NRT_AI
-          </div>
-        )}
         {message.imagePreview && (
           <img
             src={message.imagePreview}

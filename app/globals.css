@@ -131,125 +131,53 @@ body {
   100% { transform: translateX(100%); }
 }
 
-/* ---------- HUD grid backdrop ---------- */
-.hud-grid {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.05;
-  background-image:
-    linear-gradient(rgba(34, 211, 238, 0.9) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.9) 1px, transparent 1px);
-  background-size: 42px 42px;
-  animation: grid-drift 30s linear infinite;
-}
-@media (prefers-color-scheme: dark) {
-  .hud-grid {
-    opacity: 0.09;
-  }
-}
-@keyframes grid-drift {
-  to { background-position: 42px 42px; }
-}
-
-/* ---------- Big centered 3D globe, full-viewport backdrop ---------- */
-.hud-viewport {
+/* ---------- Big centered 3D globe, full-viewport cinematic backdrop ---------- */
+.globe-backdrop {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
 }
-.hud-globe-canvas {
-  position: absolute;
-  inset: 0;
-}
-.hud-globe-canvas canvas {
+.globe-backdrop canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
 }
 
-.hud-corner {
+/* Soft vignette so the panel content stays comfortably readable */
+.globe-backdrop::after {
+  content: "";
   position: absolute;
-  width: 22px;
-  height: 22px;
-  border-color: rgba(34, 211, 238, 0.55);
-  border-style: solid;
-  border-width: 0;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(2, 6, 23, 0.35) 100%);
 }
-.hud-corner.tl { top: 14px; left: 14px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 4px; }
-.hud-corner.tr { top: 14px; right: 14px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 4px; }
-.hud-corner.bl { bottom: 14px; left: 14px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 4px; }
-.hud-corner.br { bottom: 14px; right: 14px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 4px; }
-
-.hud-scanline {
-  position: absolute;
-  left: 6%;
-  right: 6%;
-  height: 1.5px;
-  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.7), transparent);
-  animation: hud-scan 6s ease-in-out infinite;
-}
-@keyframes hud-scan {
-  0%, 100% { top: 8%; opacity: 0; }
-  10% { opacity: 1; }
-  50% { top: 92%; opacity: 1; }
-  60% { opacity: 0; }
-}
-
-.hud-label {
-  position: absolute;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: rgba(34, 211, 238, 0.9);
-  text-shadow: 0 0 6px rgba(34, 211, 238, 0.6);
-}
-.hud-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 9999px;
-  background: #22d3ee;
-  box-shadow: 0 0 6px #22d3ee;
-  animation: hud-blink 1.6s ease-in-out infinite;
-}
-@keyframes hud-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+@media (prefers-color-scheme: light) {
+  .globe-backdrop::after {
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(255, 255, 255, 0.55) 100%);
+  }
 }
 
 /* ---------- Floating glass console (chat content lives above the globe) ---------- */
 .console-panel {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(34, 211, 238, 0.18);
-  box-shadow: 0 8px 40px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 12px 48px -16px rgba(15, 23, 42, 0.3);
 }
 @media (prefers-color-scheme: dark) {
   .console-panel {
-    background: rgba(9, 12, 20, 0.62);
-    border-color: rgba(34, 211, 238, 0.15);
-    box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(34, 211, 238, 0.06) inset;
+    background: rgba(9, 12, 20, 0.68);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 48px -16px rgba(0, 0, 0, 0.65);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aurora-blob,
   .gradient-bar,
-  .gradient-text,
-  .hud-grid,
-  .hud-scanline,
-  .hud-dot {
+  .gradient-text {
     animation: none;
   }
 }
