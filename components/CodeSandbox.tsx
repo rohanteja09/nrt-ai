@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import CopyButton from "./CopyButton";
 
 export default function CodeSandbox({ code }: { code: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -46,14 +47,17 @@ export default function CodeSandbox({ code }: { code: string }) {
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           {"\u{1F4BB}"} Code sandbox (runs in your browser only)
         </span>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={run}
-          className="rounded-md bg-gradient-to-br from-blue-700 to-zinc-950 px-2.5 py-1 text-xs font-medium text-white"
-        >
-          {ran ? "Run again" : "Run"}
-        </motion.button>
+        <div className="flex items-center gap-1.5">
+          <CopyButton text={code} />
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={run}
+            className="rounded-md bg-gradient-to-br from-blue-700 to-zinc-950 px-2.5 py-1 text-xs font-medium text-white"
+          >
+            {ran ? "Run again" : "Run"}
+          </motion.button>
+        </div>
       </div>
       <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-2.5 text-xs text-zinc-100">
         <code>{code}</code>

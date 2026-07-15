@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Footer from "@/components/Footer";
 import Globe3D from "@/components/Globe3D";
+import ThemeInit from "@/components/ThemeInit";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://nrt-ai.rohan-nallapaneni.workers.dev"),
   title: "NRT AI",
   description: "A free, always-on AI assistant that chats, browses, codes, and creates — built by Rohan Teja Nallapaneni",
 };
@@ -30,6 +32,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <ThemeInit />
         <div className="aurora" aria-hidden="true">
           <div className="aurora-blob one" />
           <div className="aurora-blob two" />

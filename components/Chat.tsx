@@ -40,11 +40,14 @@ export default function Chat() {
   const [attachedImage, setAttachedImage] = useState<{ file: File; previewUrl: string } | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const nearBottomRef = useRef(true);
   const voiceBaseRef = useRef("");
   const { supported: voiceSupported, listening, start: startVoice, stop: stopVoice } = useVoiceInput(
     (transcript) => {
@@ -54,8 +57,27 @@ export default function Chat() {
   );
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (nearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      setShowJumpToLatest(false);
+    } else {
+      setShowJumpToLatest(true);
+    }
   }, [messages]);
+
+  function handleScroll() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    nearBottomRef.current = nearBottom;
+    if (nearBottom) setShowJumpToLatest(false);
+  }
+
+  function jumpToLatest() {
+    nearBottomRef.current = true;
+    setShowJumpToLatest(false);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
 
   useEffect(() => {
     fetch("/api/status")
@@ -231,7 +253,7 @@ export default function Chat() {
           <SuggestionChips onPick={(t) => send(t)} />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto py-6">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6">
           <AnimatePresence initial={false}>
             {messages.map((m) => (
               <MessageBubble
@@ -256,6 +278,26 @@ export default function Chat() {
           <div ref={bottomRef} />
         </div>
       )}
+
+      <AnimatePresence>
+        {showJumpToLatest && (
+          <motion.button
+            initial={{ opacity: 0, y: 8, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.9 }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={jumpToLatest}
+            title="Jump to latest message"
+            className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-zinc-200/70 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-900/90 dark:text-zinc-300"
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3v9M4 8l4 4 4-4" />
+            </svg>
+            Jump to latest
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       <LimitToast message={toast} />
 

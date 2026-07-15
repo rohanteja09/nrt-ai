@@ -1,6 +1,7 @@
 import Chat from "@/components/Chat";
 import Logo from "@/components/Logo";
 import StatusBadge from "@/components/StatusBadge";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Home() {
   return (
@@ -16,7 +17,10 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <StatusBadge />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <StatusBadge />
+          </div>
         </div>
         <div className="gradient-bar absolute inset-x-0 bottom-0" />
       </header>

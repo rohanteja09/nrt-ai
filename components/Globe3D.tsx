@@ -366,6 +366,20 @@ export default function Globe3D() {
       ringedPlanet.add(ring);
       scene.add(ringedPlanet);
 
+      // Subtle mouse-parallax: the camera drifts a little toward the cursor
+      // and always re-centers on the globe, so the scene feels responsive
+      // rather than a static loop. Disabled on touch-only devices.
+      const pointer = { x: 0, y: 0 };
+      const cameraOffset = { x: 0, y: 0 };
+      const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+      const onPointerMove = (e: PointerEvent) => {
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+      };
+      if (hasFinePointer && !reduced) {
+        window.addEventListener("pointermove", onPointerMove);
+      }
+
       const clock = new THREE.Clock();
       let raf = 0;
       let running = false;
@@ -382,6 +396,15 @@ export default function Globe3D() {
           pivot.rotation.y += dt * speed;
           craft.lookAt(pivot.position);
         });
+
+        if (hasFinePointer) {
+          cameraOffset.x += (pointer.x * 0.35 - cameraOffset.x) * Math.min(1, dt * 2.5);
+          cameraOffset.y += (-pointer.y * 0.22 - cameraOffset.y) * Math.min(1, dt * 2.5);
+          camera.position.x = cameraOffset.x;
+          camera.position.y = cameraOffset.y;
+          camera.lookAt(0, 0, 0);
+        }
+
         renderer.render(scene, camera);
       }
       function start() {
@@ -415,6 +438,7 @@ export default function Globe3D() {
         pause();
         window.removeEventListener("resize", onResize);
         document.removeEventListener("visibilitychange", onVisibility);
+        window.removeEventListener("pointermove", onPointerMove);
         renderer.dispose();
         disposables.forEach((d) => d.dispose());
         satPanelMat.dispose();

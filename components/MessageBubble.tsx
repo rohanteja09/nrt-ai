@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import ToolCallCard from "./ToolCallCard";
 import Markdown from "./Markdown";
+import Logo from "./Logo";
 import { useTypewriter } from "@/lib/useTypewriter";
 import type { ChatMessage } from "@/lib/types";
 
@@ -25,8 +26,13 @@ export default function MessageBubble({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`group mb-4 flex items-center gap-1.5 ${isUser ? "justify-end" : "justify-start"}`}
+      className={`group mb-4 flex items-end gap-1.5 ${isUser ? "justify-end" : "justify-start"}`}
     >
+      {!isUser && (
+        <div className="mb-0.5 shrink-0">
+          <Logo size={22} />
+        </div>
+      )}
       {isUser && onEdit && (
         <button
           onClick={onEdit}
