@@ -235,6 +235,13 @@ export async function runAgent(
   const lastUserMessage = history[history.length - 1]?.content ?? "";
   const route = precomputedRoute ?? (await routeMessage(env, lastUserMessage));
 
+  // Scoped across every round (not reset per round) — the model doesn't just
+  // repeat a tool call within one response, it sometimes calls generate_image
+  // again in a *later* round after already generating one (e.g. reflecting
+  // on its own tool result and deciding to "confirm" by generating again).
+  // Each unique action still only runs once per whole request either way.
+  const seen = new Map<string, { output: string; tc: ToolCall }>();
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const allowTools = route !== "none" && round < MAX_TOOL_ROUNDS - 1;
     const result = await env.AI.run(MODEL, {
@@ -259,12 +266,6 @@ export async function runAgent(
         function: { name: c.name, arguments: JSON.stringify(c.arguments ?? {}) },
       })),
     });
-
-    // The model occasionally emits two identical tool_calls in one turn (e.g.
-    // generate_image called twice with the same prompt) — run each unique
-    // action once and reuse its result for the duplicate, instead of paying
-    // for (and showing) the same search/image generation twice.
-    const seen = new Map<string, { output: string; tc: ToolCall }>();
 
     for (const call of calls) {
       const args = (call.arguments ?? {}) as Record<string, string>;
