@@ -89,6 +89,27 @@ export default function ToolCallCard({ call }: { call: ToolCall }) {
         {call.kind === "image" && running && (
           <div className="blur-resolve mt-2 h-24 w-full rounded-md bg-gradient-to-br from-blue-400 via-indigo-500 to-zinc-900" />
         )}
+        {call.kind === "search" && running && (
+          <div className="mt-2 space-y-1.5">
+            <div className="h-2.5 w-3/4 animate-pulse rounded bg-cyan-500/20" />
+            <div className="h-2.5 w-1/2 animate-pulse rounded bg-cyan-500/20" />
+            <div className="h-2.5 w-2/3 animate-pulse rounded bg-cyan-500/20" />
+          </div>
+        )}
+        {call.kind === "browse" && running && (
+          <div className="mt-2 space-y-1.5">
+            <div className="h-2.5 w-full animate-pulse rounded bg-emerald-500/20" />
+            <div className="h-2.5 w-5/6 animate-pulse rounded bg-emerald-500/20" />
+            <div className="h-2.5 w-2/3 animate-pulse rounded bg-emerald-500/20" />
+          </div>
+        )}
+        {call.kind === "code" && running && (
+          <div className="mt-2 space-y-1.5 rounded-md bg-zinc-900/90 p-2">
+            <div className="h-2 w-2/3 animate-pulse rounded bg-amber-400/30" />
+            <div className="h-2 w-1/2 animate-pulse rounded bg-amber-400/20" />
+            <div className="h-2 w-3/4 animate-pulse rounded bg-amber-400/25" />
+          </div>
+        )}
 
         {call.detail && (
           <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-500 dark:text-zinc-400">

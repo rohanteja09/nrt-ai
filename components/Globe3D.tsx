@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { REDUCED_MOTION_EVENT, resolveReducedMotion } from "@/lib/preferences";
 
 const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
@@ -61,7 +62,7 @@ export default function Globe3D() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let reduced = resolveReducedMotion();
     let cancelled = false;
     let cleanup: (() => void) | undefined;
 
@@ -790,13 +791,21 @@ export default function Globe3D() {
         if (document.hidden) pause();
         else if (!reduced) start();
       };
+      const onReducedMotionChange = () => {
+        reduced = resolveReducedMotion();
+        if (reduced) pause();
+        else if (!document.hidden) start();
+        if (reduced) renderer.render(scene, camera);
+      };
       window.addEventListener("resize", onResize);
       document.addEventListener("visibilitychange", onVisibility);
+      window.addEventListener(REDUCED_MOTION_EVENT, onReducedMotionChange);
 
       cleanup = () => {
         pause();
         window.removeEventListener("resize", onResize);
         document.removeEventListener("visibilitychange", onVisibility);
+        window.removeEventListener(REDUCED_MOTION_EVENT, onReducedMotionChange);
         window.removeEventListener("pointermove", onPointerMove);
         [...meteors, ...comets].forEach((m) => {
           m.lineMat.dispose();

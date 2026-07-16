@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Footer from "@/components/Footer";
 import Globe3D from "@/components/Globe3D";
 import ThemeInit from "@/components/ThemeInit";
+import AccentInit from "@/components/AccentInit";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,6 +34,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeInit />
+        <AccentInit />
         <div className="aurora" aria-hidden="true">
           <div className="aurora-blob one" />
           <div className="aurora-blob two" />

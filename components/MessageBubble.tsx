@@ -12,11 +12,14 @@ export default function MessageBubble({
   animateText,
   onEdit,
   onRegenerate,
+  grouped,
 }: {
   message: ChatMessage;
   animateText: boolean;
   onEdit?: () => void;
   onRegenerate?: () => void;
+  /** True when the previous message in the transcript shares this one's role — collapses the repeated avatar/spacing, Slack/iMessage-style. */
+  grouped?: boolean;
 }) {
   const isUser = message.role === "user";
   // Markdown structure (fences, lists) breaks mid-animation, so only animate plain prose.
@@ -31,11 +34,11 @@ export default function MessageBubble({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`group mb-4 flex items-end gap-1.5 ${isUser ? "justify-end" : "justify-start"}`}
+      className={`group ${grouped ? "mb-1" : "mb-4"} flex items-end gap-1.5 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
-        <div className="mb-0.5 shrink-0">
-          <Logo size={22} />
+        <div className="mb-0.5 w-[22px] shrink-0">
+          {!grouped && <Logo size={22} />}
         </div>
       )}
       {isUser && onEdit && (

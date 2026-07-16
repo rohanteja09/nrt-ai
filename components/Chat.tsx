@@ -15,6 +15,15 @@ import type { Usage } from "@/lib/rateLimit";
 import { useVoiceInput } from "@/lib/useVoiceInput";
 import { TOAST_EVENT } from "@/lib/toast";
 import { getDeviceId } from "@/lib/deviceId";
+import {
+  ACTIVE_CONVERSATION_EVENT,
+  SWITCH_CONVERSATION_EVENT,
+  createConversationId,
+  getConversation,
+  getStoredActiveId,
+  saveConversation,
+  setStoredActiveId,
+} from "@/lib/history";
 
 interface ChatApiResponse {
   text?: string;
@@ -82,12 +91,47 @@ export default function Chat() {
   const abortRef = useRef<AbortController | null>(null);
   const nearBottomRef = useRef(true);
   const voiceBaseRef = useRef("");
+  const activeIdRef = useRef("");
   const { supported: voiceSupported, listening, start: startVoice, stop: stopVoice } = useVoiceInput(
     (transcript) => {
       const base = voiceBaseRef.current;
       setInput(`${base}${base && transcript ? " " : ""}${transcript}`);
     }
   );
+
+  // Load whichever conversation was last active (or start a fresh one), and
+  // listen for the sidebar asking us to switch to a different one. Chat.tsx
+  // is the sole owner of message persistence — the sidebar only ever reads
+  // the saved list and asks to switch, it never writes messages itself.
+  useEffect(() => {
+    let id = getStoredActiveId();
+    if (!id) {
+      id = createConversationId();
+      setStoredActiveId(id);
+    }
+    activeIdRef.current = id;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading persisted state post-mount, same pattern as ThemeToggle
+    setMessages(getConversation(id)?.messages ?? []);
+    window.dispatchEvent(new CustomEvent<string>(ACTIVE_CONVERSATION_EVENT, { detail: id }));
+
+    const onSwitch = (e: Event) => {
+      const nextId = (e as CustomEvent<string>).detail;
+      if (typeof nextId !== "string") return;
+      activeIdRef.current = nextId;
+      setStoredActiveId(nextId);
+      setMessages(getConversation(nextId)?.messages ?? []);
+      setLastAssistantId(null);
+      window.dispatchEvent(new CustomEvent<string>(ACTIVE_CONVERSATION_EVENT, { detail: nextId }));
+    };
+    window.addEventListener(SWITCH_CONVERSATION_EVENT, onSwitch);
+    return () => window.removeEventListener(SWITCH_CONVERSATION_EVENT, onSwitch);
+  }, []);
+
+  // Persist the active conversation whenever its messages change.
+  useEffect(() => {
+    if (messages.length === 0) return;
+    saveConversation(activeIdRef.current, messages);
+  }, [messages]);
 
   useEffect(() => {
     if (nearBottomRef.current) {
@@ -417,11 +461,12 @@ export default function Chat() {
       ) : (
         <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6">
           <AnimatePresence initial={false}>
-            {messages.map((m) => (
+            {messages.map((m, i) => (
               <MessageBubble
                 key={m.id}
                 message={m}
                 animateText={m.id === lastAssistantId}
+                grouped={messages[i - 1]?.role === m.role}
                 onEdit={m.role === "user" ? () => editMessage(m.id) : undefined}
                 onRegenerate={
                   m.role === "assistant" && !awaitingFirstToken ? () => regenerate(m.id) : undefined
@@ -511,7 +556,7 @@ export default function Chat() {
           <motion.div
             animate={{
               boxShadow: focused
-                ? "0 0 0 3px rgba(37,99,235,0.25), 0 8px 24px -8px rgba(37,99,235,0.35)"
+                ? "0 0 0 3px rgb(var(--accent-rgb) / 0.25), 0 8px 24px -8px rgb(var(--accent-rgb) / 0.35)"
                 : "0 1px 2px rgba(0,0,0,0.04)",
             }}
             transition={{ duration: 0.2 }}
@@ -601,7 +646,7 @@ export default function Chat() {
                 whileTap={{ scale: input.trim() || attachedImage ? 0.95 : 1 }}
                 onClick={() => send()}
                 disabled={!input.trim() && !attachedImage}
-                className="rounded-xl bg-gradient-to-br from-blue-700 to-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-30"
+                className="accent-send-btn rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-30"
               >
                 Send
               </motion.button>
