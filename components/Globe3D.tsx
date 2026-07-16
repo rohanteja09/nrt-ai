@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { REDUCED_MOTION_EVENT, resolveReducedMotion } from "@/lib/preferences";
+import { BODY_FACTS, BODY_ORDER } from "@/lib/planetFacts";
 
 const DAY_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
 const NIGHT_TEXTURE = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
@@ -57,9 +60,39 @@ interface StreakBody {
   travel: number;
 }
 
+interface CameraControls {
+  returnToOverview: () => void;
+}
+
 export default function Globe3D() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<CameraControls | null>(null);
   const [ready, setReady] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [tickerIndex, setTickerIndex] = useState(0);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- document.body only exists client-side, portal below must wait for mount
+    setMounted(true);
+  }, []);
+
+  // Live "did you know" ticker: cycles through a fact about each body every
+  // few seconds, independent of hover/click — a passive bit of content for
+  // anyone just watching the background rather than interacting with it.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTickerIndex((i) => (i + 1) % BODY_ORDER.length);
+    }, 7000);
+    return () => clearInterval(id);
+  }, []);
+
+  function closePlanetCard() {
+    setSelectedKey(null);
+    controlsRef.current?.returnToOverview();
+  }
 
   useEffect(() => {
     let reduced = resolveReducedMotion();
@@ -677,6 +710,130 @@ export default function Globe3D() {
         return { pivot, craft, speed: cfg.speed };
       });
 
+      // ---- Clickable bodies: hover for a name tooltip, click to open an
+      // info card and fly the camera toward it. Hit-testing is screen-space
+      // (project each body's current world position, compare pixel distance
+      // to the pointer) rather than mesh raycasting, since Earth's real mesh
+      // swaps in asynchronously once its texture loads.
+      interface ClickableBody {
+        key: string;
+        getPos: () => import("three").Vector3;
+        radius: number;
+      }
+      const clickableBodies: ClickableBody[] = [
+        { key: "sun", getPos: () => sunGroup.position, radius: 1.3 },
+        { key: "mercury", getPos: () => mercury.position, radius: 0.13 },
+        { key: "venus", getPos: () => venus.position, radius: 0.2 },
+        { key: "earth", getPos: () => earthGroup.position, radius: earthRadius },
+        { key: "mars", getPos: () => mars.position, radius: 0.18 },
+        { key: "jupiter", getPos: () => jupiter.position, radius: 0.65 },
+        { key: "saturn", getPos: () => saturn.position, radius: 0.56 },
+        { key: "uranus", getPos: () => uranus.position, radius: 0.34 },
+        { key: "neptune", getPos: () => neptune.position, radius: 0.32 },
+        { key: "pluto", getPos: () => pluto.position, radius: 0.08 },
+      ];
+
+      function screenPosOf(worldPos: import("three").Vector3): { x: number; y: number } | null {
+        const p = worldPos.clone().project(camera);
+        if (p.z > 1 || p.z < -1) return null;
+        const rect = renderer.domElement.getBoundingClientRect();
+        return {
+          x: rect.left + (p.x * 0.5 + 0.5) * rect.width,
+          y: rect.top + (-p.y * 0.5 + 0.5) * rect.height,
+        };
+      }
+
+      function apparentPixelRadius(worldPos: import("three").Vector3, worldRadius: number): number {
+        const center = screenPosOf(worldPos);
+        if (!center) return 0;
+        const edge = screenPosOf(worldPos.clone().add(new THREE.Vector3(worldRadius, 0, 0)));
+        if (!edge) return 0;
+        return Math.hypot(edge.x - center.x, edge.y - center.y);
+      }
+
+      function hitTest(clientX: number, clientY: number): string | null {
+        let best: { key: string; dist: number } | null = null;
+        for (const b of clickableBodies) {
+          const pos = b.getPos();
+          const screen = screenPosOf(pos);
+          if (!screen) continue;
+          const apparentR = Math.max(apparentPixelRadius(pos, b.radius), 14);
+          const dist = Math.hypot(clientX - screen.x, clientY - screen.y);
+          if (dist <= apparentR && (!best || dist < best.dist)) best = { key: b.key, dist };
+        }
+        return best?.key ?? null;
+      }
+
+      // ---- Click-to-focus camera: tweens toward a clicked body using the
+      // same ease-out approach as the intro fly-in, then continuously
+      // re-aims at it (bodies keep slowly drifting along their orbit) until
+      // the user backs out to the overview framing.
+      const FOCUS_DURATION = 1.1;
+      let focusedKey: string | null = null;
+      let focusGetPos: (() => import("three").Vector3) | null = null;
+      let focusTransitionT = 1;
+      let focusFromPos = new THREE.Vector3();
+      let focusToPos = new THREE.Vector3();
+      let returningToOverview = false;
+
+      function focusOn(key: string) {
+        const body = clickableBodies.find((b) => b.key === key);
+        if (!body) return;
+        const planetPos = body.getPos();
+        const dir = camera.position.clone().sub(planetPos);
+        if (dir.lengthSq() < 0.0001) dir.set(0, 0.3, 1);
+        dir.normalize();
+        const dist = body.radius * 6 + 1.4;
+        focusFromPos = camera.position.clone();
+        focusToPos = planetPos.clone().add(dir.multiplyScalar(dist));
+        focusGetPos = body.getPos;
+        focusedKey = key;
+        focusTransitionT = 0;
+        returningToOverview = false;
+      }
+
+      function returnToOverview() {
+        if (!focusedKey && focusTransitionT >= 1) return;
+        focusFromPos = camera.position.clone();
+        focusToPos = CAMERA_FINAL_POS.clone();
+        focusTransitionT = 0;
+        returningToOverview = true;
+      }
+
+      controlsRef.current = { returnToOverview };
+
+      // Tracks the selected body synchronously for the click handler below —
+      // React state updates are async, so a plain ref is what the imperative
+      // "click empty space to deselect" check needs to read reliably.
+      const selectedKeyRef = { current: null as string | null };
+      function selectBody(key: string | null) {
+        selectedKeyRef.current = key;
+        setSelectedKey(key);
+      }
+
+      const onPointerMoveHover = (e: PointerEvent) => {
+        const key = hitTest(e.clientX, e.clientY);
+        setHoveredKey((prev) => (prev === key ? prev : key));
+        renderer.domElement.style.cursor = key ? "pointer" : "";
+        if (key && tooltipRef.current) {
+          tooltipRef.current.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 14}px)`;
+        }
+      };
+      const onCanvasClick = (e: MouseEvent) => {
+        const key = hitTest(e.clientX, e.clientY);
+        if (key) {
+          focusOn(key);
+          selectBody(key);
+        } else if (selectedKeyRef.current) {
+          returnToOverview();
+          selectBody(null);
+        }
+      };
+      if (hasFinePointer && !reduced) {
+        window.addEventListener("pointermove", onPointerMoveHover);
+        renderer.domElement.addEventListener("click", onCanvasClick);
+      }
+
       const clock = new THREE.Clock();
       let raf = 0;
       let running = false;
@@ -753,6 +910,25 @@ export default function Globe3D() {
           camera.position.lerpVectors(CAMERA_FLY_START, CAMERA_FINAL_POS, eased);
           camera.lookAt(CAMERA_LOOK_TARGET);
           CAMERA_BASE_QUATERNION = camera.quaternion.clone();
+        } else if (focusTransitionT < 1) {
+          // Tweening toward (or back from) a clicked planet.
+          focusTransitionT = Math.min(1, focusTransitionT + dt / FOCUS_DURATION);
+          const eased = 1 - Math.pow(1 - focusTransitionT, 3);
+          camera.position.lerpVectors(focusFromPos, focusToPos, eased);
+          const liveTarget = focusGetPos ? focusGetPos() : CAMERA_LOOK_TARGET;
+          const lookTarget = returningToOverview
+            ? new THREE.Vector3().lerpVectors(liveTarget, CAMERA_LOOK_TARGET, eased)
+            : liveTarget;
+          camera.lookAt(lookTarget);
+          if (focusTransitionT >= 1 && returningToOverview) {
+            focusedKey = null;
+            focusGetPos = null;
+            CAMERA_BASE_QUATERNION = camera.quaternion.clone();
+          }
+        } else if (focusedKey && focusGetPos) {
+          // Holding on a planet: position stays put, but keep re-aiming since
+          // the planet keeps slowly drifting along its bounded orbital arc.
+          camera.lookAt(focusGetPos());
         } else if (hasFinePointer) {
           // Rotational parallax: a small pan/tilt layered on top of the
           // fixed elevated base orientation, instead of translating the
@@ -807,6 +983,9 @@ export default function Globe3D() {
         document.removeEventListener("visibilitychange", onVisibility);
         window.removeEventListener(REDUCED_MOTION_EVENT, onReducedMotionChange);
         window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointermove", onPointerMoveHover);
+        renderer.domElement.removeEventListener("click", onCanvasClick);
+        controlsRef.current = null;
         [...meteors, ...comets].forEach((m) => {
           m.lineMat.dispose();
           m.lineGeo.dispose();
@@ -831,10 +1010,100 @@ export default function Globe3D() {
     };
   }, []);
 
+  const tickerFact = BODY_FACTS[BODY_ORDER[tickerIndex]];
+  const selectedFact = selectedKey ? BODY_FACTS[selectedKey] : null;
+
   return (
-    <div className="globe-backdrop" aria-hidden="true">
-      <div ref={containerRef} className="absolute inset-0" />
-      <div className={`globe-placeholder ${ready ? "globe-placeholder-hidden" : ""}`} />
-    </div>
+    <>
+      <div className="globe-backdrop" aria-hidden="true">
+        <div ref={containerRef} className="absolute inset-0" />
+        <div className={`globe-placeholder ${ready ? "globe-placeholder-hidden" : ""}`} />
+      </div>
+
+      {hoveredKey && !selectedKey && (
+        <div
+          ref={tooltipRef}
+          className="pointer-events-none fixed left-0 top-0 z-20 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white"
+        >
+          {BODY_FACTS[hoveredKey]?.name}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {!selectedKey && tickerFact && (
+          <motion.div
+            key={tickerFact.key}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.5 }}
+            className="pointer-events-none fixed bottom-3 left-3 z-10 max-w-[min(22rem,80vw)] rounded-lg bg-black/40 px-3 py-1.5 text-[11px] leading-snug text-white/80 backdrop-blur-sm"
+          >
+            <span className="font-semibold text-white/95">{tickerFact.name}:</span> {tickerFact.fact}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {selectedFact && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={closePlanetCard}
+                  className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={selectedFact.name}
+                  className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-800/70 bg-zinc-950/95 p-5 text-zinc-100 shadow-xl backdrop-blur-md"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-base font-semibold">{selectedFact.name}</h2>
+                    <button
+                      onClick={closePlanetCard}
+                      aria-label="Close"
+                      className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <dt className="text-zinc-500">Distance from Sun</dt>
+                    <dd className="text-right text-zinc-200">{selectedFact.distanceFromSun}</dd>
+                    <dt className="text-zinc-500">Day length</dt>
+                    <dd className="text-right text-zinc-200">{selectedFact.dayLength}</dd>
+                    <dt className="text-zinc-500">Moons</dt>
+                    <dd className="text-right text-zinc-200">{selectedFact.moons}</dd>
+                  </dl>
+
+                  <p className="mt-3 border-t border-zinc-800 pt-3 text-xs leading-relaxed text-zinc-300">
+                    {selectedFact.fact}
+                  </p>
+
+                  <button
+                    onClick={closePlanetCard}
+                    className="mt-4 w-full rounded-lg border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    ← Back to overview
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+    </>
   );
 }

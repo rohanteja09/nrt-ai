@@ -260,12 +260,23 @@ export async function runAgent(
       })),
     });
 
+    // The model occasionally emits two identical tool_calls in one turn (e.g.
+    // generate_image called twice with the same prompt) — run each unique
+    // action once and reuse its result for the duplicate, instead of paying
+    // for (and showing) the same search/image generation twice.
+    const seen = new Map<string, { output: string; tc: ToolCall }>();
+
     for (const call of calls) {
       const args = (call.arguments ?? {}) as Record<string, string>;
+      const signature = `${call.name}:${JSON.stringify(Object.entries(args).sort())}`;
+      const prior = seen.get(signature);
       let output: string;
       let tc: ToolCall;
 
-      if (call.name === "web_search") {
+      if (prior) {
+        output = prior.output;
+        tc = prior.tc;
+      } else if (call.name === "web_search") {
         const outcome = await webSearch(args.query ?? "");
         output = outcome.formatted;
         tc = {
@@ -331,7 +342,10 @@ export async function runAgent(
         };
       }
 
-      toolCalls.push(tc);
+      if (!prior) {
+        seen.set(signature, { output, tc });
+        toolCalls.push(tc);
+      }
       messages.push({ role: "tool", tool_call_id: call.id, content: output });
     }
   }

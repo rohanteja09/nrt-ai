@@ -189,7 +189,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Desktop: an in-flow collapsible column, always in the layout. */}
-      <div className={`hidden shrink-0 overflow-hidden transition-[width] duration-200 md:block ${open ? "w-64" : "w-0"}`}>
+      <div className={`pointer-events-auto hidden shrink-0 overflow-hidden transition-[width] duration-200 md:block ${open ? "w-64" : "w-0"}`}>
         {open && panel}
       </div>
       {!open && (
@@ -197,7 +197,7 @@ export default function Sidebar() {
           onClick={() => setOpen(true)}
           title="Open sidebar"
           aria-label="Open sidebar"
-          className="fixed left-2 top-3 z-30 hidden h-8 w-8 items-center justify-center rounded-lg border border-zinc-200/70 bg-white/80 text-zinc-500 backdrop-blur-sm hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:flex dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:hover:bg-zinc-800"
+          className="pointer-events-auto fixed left-2 top-3 z-30 hidden h-8 w-8 items-center justify-center rounded-lg border border-zinc-200/70 bg-white/80 text-zinc-500 backdrop-blur-sm hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:flex dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:hover:bg-zinc-800"
         >
           <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
             <rect x="3" y="4" width="14" height="12" rx="2" />
@@ -213,7 +213,7 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(true)}
         title="Open conversation history"
         aria-label="Open conversation history"
-        className="fixed left-2 top-3 z-30 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200/70 bg-white/80 text-zinc-500 backdrop-blur-sm hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        className="pointer-events-auto fixed left-2 top-3 z-30 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200/70 bg-white/80 text-zinc-500 backdrop-blur-sm hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:bg-zinc-800"
       >
         <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
           <path d="M3 5.5h14M3 10h14M3 14.5h14" />
@@ -227,14 +227,14 @@ export default function Sidebar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              className="pointer-events-auto fixed inset-0 z-40 bg-black/40 md:hidden"
             />
             <motion.div
               initial={{ x: -280 }}
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="fixed inset-y-0 left-0 z-50 md:hidden"
+              className="pointer-events-auto fixed inset-y-0 left-0 z-50 md:hidden"
             >
               {panel}
             </motion.div>

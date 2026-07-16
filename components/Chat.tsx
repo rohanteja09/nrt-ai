@@ -91,6 +91,7 @@ export default function Chat() {
   const nearBottomRef = useRef(true);
   const voiceBaseRef = useRef("");
   const activeIdRef = useRef("");
+  const dragCounterRef = useRef(0);
   const { supported: voiceSupported, listening, start: startVoice, stop: stopVoice } = useVoiceInput(
     (transcript) => {
       const base = voiceBaseRef.current;
@@ -148,6 +149,44 @@ export default function Chat() {
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 128)}px`;
   }, [input]);
+
+  // Window-level drag-and-drop (drop an image anywhere on the page) instead
+  // of scoping it to this component's own root — that root needs to stay
+  // pointer-events-none in the empty margins around the chat column so the
+  // space background's clickable planets remain reachable, and CSS
+  // pointer-events:none would otherwise block an element from ever being a
+  // drop target in the first place.
+  useEffect(() => {
+    function onWindowDragEnter(e: DragEvent) {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      dragCounterRef.current += 1;
+      setDragOver(true);
+    }
+    function onWindowDragOver(e: DragEvent) {
+      e.preventDefault();
+    }
+    function onWindowDragLeave() {
+      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+      if (dragCounterRef.current === 0) setDragOver(false);
+    }
+    function onWindowDrop(e: DragEvent) {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setDragOver(false);
+      const file = Array.from(e.dataTransfer?.files ?? []).find((f) => f.type.startsWith("image/"));
+      if (file) pickImage(file);
+    }
+    window.addEventListener("dragenter", onWindowDragEnter);
+    window.addEventListener("dragover", onWindowDragOver);
+    window.addEventListener("dragleave", onWindowDragLeave);
+    window.addEventListener("drop", onWindowDrop);
+    return () => {
+      window.removeEventListener("dragenter", onWindowDragEnter);
+      window.removeEventListener("dragover", onWindowDragOver);
+      window.removeEventListener("dragleave", onWindowDragLeave);
+      window.removeEventListener("drop", onWindowDrop);
+    };
+  }, []);
 
   function handleScroll() {
     const el = scrollContainerRef.current;
@@ -256,13 +295,6 @@ export default function Chat() {
         pickImage(file);
       }
     }
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(false);
-    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
-    if (file) pickImage(file);
   }
 
   function editMessage(id: string) {
@@ -445,15 +477,7 @@ export default function Chat() {
     slashQuery !== null ? SLASH_COMMANDS.filter((c) => c.cmd.slice(1).startsWith(slashQuery)) : [];
 
   return (
-    <div
-      className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4"
-      onDrop={handleDrop}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-    >
+    <div className="pointer-events-none relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4">
       {/* Announces the final text of each assistant reply to screen readers,
           without repeating on every typewriter/tool-status update. */}
       <div aria-live="polite" className="sr-only">
@@ -488,12 +512,12 @@ export default function Chat() {
       </AnimatePresence>
 
       {isEmpty ? (
-        <div className="flex flex-1 flex-col items-center gap-6 pb-24 pt-8">
+        <div className="pointer-events-none flex flex-1 flex-col items-center gap-6 pb-24 pt-8">
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="rounded-2xl border border-white/50 bg-white/65 px-6 py-5 text-center shadow-sm backdrop-blur-md dark:border-white/5 dark:bg-zinc-950/55"
+            className="pointer-events-auto rounded-2xl border border-white/50 bg-white/65 px-6 py-5 text-center shadow-sm backdrop-blur-md dark:border-white/5 dark:bg-zinc-950/55"
           >
             <h2 className="gradient-text text-3xl font-bold tracking-tight sm:text-4xl">
               What should we do today?
@@ -504,7 +528,7 @@ export default function Chat() {
           </motion.div>
         </div>
       ) : (
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="pointer-events-auto flex-1 overflow-y-auto py-6">
           <AnimatePresence initial={false}>
             {messages.map((m, i) => (
               <MessageBubble
@@ -545,7 +569,7 @@ export default function Chat() {
             whileTap={{ scale: 0.95 }}
             onClick={jumpToLatest}
             title="Jump to latest message"
-            className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-zinc-200/70 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800/70 dark:bg-zinc-900/90 dark:text-zinc-300"
+            className="pointer-events-auto absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-zinc-200/70 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800/70 dark:bg-zinc-900/90 dark:text-zinc-300"
           >
             <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3v9M4 8l4 4 4-4" />
@@ -557,7 +581,7 @@ export default function Chat() {
 
       <LimitToast message={toast} />
 
-      <div className="sticky bottom-0 pb-4 pt-2">
+      <div className="pointer-events-auto sticky bottom-0 pb-4 pt-2">
         <UsageBar usage={usage} />
         {attachedImage && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-950/80">

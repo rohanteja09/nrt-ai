@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Globe3D from "@/components/Globe3D";
-import ThemeInit from "@/components/ThemeInit";
 import AccentInit from "@/components/AccentInit";
 import "./globals.css";
 
@@ -29,17 +28,19 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <ThemeInit />
         <AccentInit />
         <div className="aurora" aria-hidden="true">
           <div className="aurora-blob one" />
           <div className="aurora-blob two" />
         </div>
         <Globe3D />
-        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+        {/* pointer-events-none so empty space still click-through's to the
+            background's clickable planets — actual UI pieces (header, chat,
+            sidebar, footer) re-enable it on themselves. */}
+        <div className="relative z-10 flex min-h-full flex-1 flex-col pointer-events-none">
           {children}
         </div>
       </body>

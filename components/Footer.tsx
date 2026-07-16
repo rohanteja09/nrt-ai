@@ -54,7 +54,7 @@ export const SUGGEST_EVENT = "nrt-suggest";
 
 export default function Footer() {
   return (
-    <footer className="relative mt-auto">
+    <footer className="pointer-events-auto relative mt-auto">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3 px-4 py-4">
         <div className="flex flex-wrap items-center justify-center gap-2">
           {CAPABILITIES.map((c, i) => (

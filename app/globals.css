@@ -191,22 +191,27 @@ body {
   position: fixed;
   inset: 0;
   z-index: 0;
-  pointer-events: none;
   overflow: hidden;
 }
 .globe-backdrop canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
+  /* The canvas itself accepts clicks/hover (for the clickable-planets
+     easter egg) — anything visually on top of it (chat UI, header, etc.)
+     still wins the hit-test since it sits at a higher z-index. */
+  cursor: default;
 }
 
 /* Soft vignette so the panel content stays comfortably readable — same
    subtle dark falloff regardless of theme, since the globe image itself
-   is always dark and shouldn't be washed out near the header. */
+   is always dark and shouldn't be washed out near the header. Must not
+   intercept clicks meant for the canvas underneath it. */
 .globe-backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 40%, rgba(2, 6, 23, 0.4) 100%);
 }
 

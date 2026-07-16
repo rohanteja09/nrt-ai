@@ -1,7 +1,7 @@
 import { ACCENT_STORAGE_KEY } from "@/lib/preferences";
 
-// Runs before hydration to set data-accent synchronously, same reasoning as
-// ThemeInit — avoids a flash of the default accent on load.
+// Runs before hydration to set data-accent synchronously, avoiding a flash
+// of the default accent on load.
 const script = `
 (function () {
   try {

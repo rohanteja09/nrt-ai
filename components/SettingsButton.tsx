@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { THEME_STORAGE_KEY } from "./ThemeInit";
 import {
   ACCENTS,
   type Accent,
@@ -36,7 +35,6 @@ const MOTION_OPTIONS: { value: boolean | null; label: string }[] = [
 
 export default function SettingsButton() {
   const [open, setOpen] = useState(false);
-  const [dark, setDark] = useState(false);
   const [accent, setAccent] = useState<Accent>("blue");
   const [motionPref, setMotionPref] = useState<boolean | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -46,7 +44,6 @@ export default function SettingsButton() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors persisted state post-mount, same pattern as ThemeToggle
-    setDark(document.documentElement.classList.contains("dark"));
     setAccent(getStoredAccent());
     setMotionPref(getReducedMotionOverride());
     setMounted(true);
@@ -57,16 +54,6 @@ export default function SettingsButton() {
     const t = setTimeout(() => setConfirmingClear(false), 3000);
     return () => clearTimeout(t);
   }, [confirmingClear]);
-
-  function setTheme(next: boolean) {
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light");
-    } catch {
-      // localStorage unavailable — theme just won't persist
-    }
-  }
 
   function pickAccent(next: Accent) {
     setAccent(next);
@@ -143,28 +130,6 @@ export default function SettingsButton() {
                 </div>
 
                 <div className="space-y-5 text-sm">
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Theme</p>
-                    <div className="flex gap-1.5">
-                      {[
-                        { label: "Light", value: false },
-                        { label: "Dark", value: true },
-                      ].map((o) => (
-                        <button
-                          key={o.label}
-                          onClick={() => setTheme(o.value)}
-                          className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                            dark === o.value
-                              ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                              : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                          }`}
-                        >
-                          {o.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div>
                     <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Accent color</p>
                     <div className="flex gap-2">
