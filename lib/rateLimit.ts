@@ -1,5 +1,5 @@
-export const DAILY_CHAT_LIMIT = 30;
-export const DAILY_IMAGE_LIMIT = 8;
+export const DAILY_CHAT_LIMIT = 60;
+export const DAILY_IMAGE_LIMIT = 20;
 
 export interface Usage {
   chatsLeft: number;
