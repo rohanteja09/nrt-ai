@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Footer from "@/components/Footer";
 import Globe3D from "@/components/Globe3D";
 import ThemeInit from "@/components/ThemeInit";
 import AccentInit from "@/components/AccentInit";
@@ -42,7 +41,6 @@ export default function RootLayout({
         <Globe3D />
         <div className="relative z-10 flex min-h-full flex-1 flex-col">
           {children}
-          <Footer />
         </div>
       </body>
     </html>

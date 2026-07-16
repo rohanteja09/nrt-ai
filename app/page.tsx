@@ -1,4 +1,5 @@
 import Chat from "@/components/Chat";
+import Footer from "@/components/Footer";
 import Logo from "@/components/Logo";
 import Sidebar from "@/components/Sidebar";
 import StatusBadge from "@/components/StatusBadge";
@@ -28,6 +29,7 @@ export default function Home() {
           <div className="gradient-bar absolute inset-x-0 bottom-0" />
         </header>
         <Chat />
+        <Footer />
       </div>
     </div>
   );
