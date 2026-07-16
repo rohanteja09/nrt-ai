@@ -12,10 +12,55 @@ import {
   listConversations,
   type Conversation,
 } from "@/lib/history";
+import { SUGGEST_EVENT } from "./Footer";
 
 function switchTo(id: string) {
   window.dispatchEvent(new CustomEvent<string>(ACTIVE_CONVERSATION_EVENT, { detail: id }));
   window.dispatchEvent(new CustomEvent<string>(SWITCH_CONVERSATION_EVENT, { detail: id }));
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="9" r="5.5" />
+      <path d="M17 17l-3.8-3.8" />
+    </svg>
+  );
+}
+function ImageIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+      <circle cx="7" cy="8" r="1.3" />
+      <path d="M17.5 13.5l-4.5-4-6 5.5" />
+    </svg>
+  );
+}
+function CodeIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 6l-4 4 4 4M13 6l4 4-4 4" />
+    </svg>
+  );
+}
+function GlobeIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="7.5" />
+      <path d="M2.5 10h15M10 2.5c2.2 2.1 3.4 4.8 3.4 7.5s-1.2 5.4-3.4 7.5c-2.2-2.1-3.4-4.8-3.4-7.5S7.8 4.6 10 2.5z" />
+    </svg>
+  );
+}
+
+const QUICK_ACTIONS = [
+  { label: "Search the web", prompt: "Search the web for who won the last cricket world cup", Icon: SearchIcon },
+  { label: "Generate an image", prompt: "Generate an image of a neon city skyline at night", Icon: ImageIcon },
+  { label: "Write & run code", prompt: "Write and run code that reverses a string", Icon: CodeIcon },
+  { label: "Browse a page", prompt: "Browse https://example.com and summarize it", Icon: GlobeIcon },
+];
+
+function suggest(prompt: string) {
+  window.dispatchEvent(new CustomEvent<string>(SUGGEST_EVENT, { detail: prompt }));
 }
 
 export default function Sidebar() {
@@ -49,6 +94,11 @@ export default function Sidebar() {
     setMobileOpen(false);
   }
 
+  function pickQuickAction(prompt: string) {
+    suggest(prompt);
+    setMobileOpen(false);
+  }
+
   function remove(e: React.MouseEvent, id: string) {
     e.stopPropagation();
     deleteConversation(id);
@@ -78,6 +128,28 @@ export default function Sidebar() {
           </svg>
         </button>
       </div>
+
+      <nav className="px-2 pb-2">
+        {QUICK_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            onClick={() => pickQuickAction(a.prompt)}
+            title={a.prompt}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            <span className="shrink-0 text-zinc-400 dark:text-zinc-500">
+              <a.Icon />
+            </span>
+            {a.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="mx-3 border-t border-zinc-200/70 dark:border-zinc-800/70" />
+
+      <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-600">
+        Chats
+      </p>
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {conversations.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
