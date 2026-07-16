@@ -1037,7 +1037,7 @@ export default function Globe3D() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.5 }}
-            className="pointer-events-none fixed bottom-3 left-3 z-10 max-w-[min(22rem,80vw)] rounded-lg bg-black/40 px-3 py-1.5 text-[11px] leading-snug text-white/80 backdrop-blur-sm"
+            className="pointer-events-none fixed bottom-3 left-3 z-10 hidden max-w-[22rem] rounded-lg bg-black/40 px-3 py-1.5 text-[11px] leading-snug text-white/80 backdrop-blur-sm sm:block"
           >
             <span className="font-semibold text-white/95">{tickerFact.name}:</span> {tickerFact.fact}
           </motion.div>
