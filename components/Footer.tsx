@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 function ChatIcon() {
   return (
@@ -79,6 +80,10 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-2 text-xs text-white/75" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
+          <Link href="/stats" className="underline decoration-white/30 underline-offset-2 hover:text-white hover:decoration-white/60">
+            Live stats
+          </Link>
+          <span aria-hidden="true">&middot;</span>
           <span>Built by</span>
           <motion.a
             href="https://github.com/rohanteja09"

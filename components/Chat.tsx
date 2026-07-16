@@ -299,6 +299,53 @@ export default function Chat() {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
+      if ((res.headers.get("content-type") ?? "").includes("text/event-stream") && res.body) {
+        setAwaitingFirstToken(false);
+        const usageHeader = res.headers.get("x-nrt-usage");
+        if (usageHeader) {
+          try {
+            applyUsage(JSON.parse(usageHeader) as Usage);
+          } catch {
+            // malformed usage header — non-fatal, usage bar just won't update this turn
+          }
+        }
+
+        const replyId = crypto.randomUUID();
+        setMessages((m) => [...m, { id: replyId, role: "assistant", text: "", streamed: true, timestamp: now() }]);
+        setLastAssistantId(replyId);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullText = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (!payload) continue;
+            try {
+              const parsed = JSON.parse(payload) as { token?: string; done?: boolean };
+              if (parsed.token) {
+                fullText += parsed.token;
+                const snapshot = fullText;
+                setMessages((m) => m.map((msg) => (msg.id === replyId ? { ...msg, text: snapshot } : msg)));
+              }
+            } catch {
+              // malformed/partial SSE fragment — skip it
+            }
+          }
+        }
+        setAnnounceText(fullText);
+        return;
+      }
+
       const data: ChatApiResponse = await res.json();
       setAwaitingFirstToken(false);
 

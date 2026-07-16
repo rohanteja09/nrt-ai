@@ -4,6 +4,7 @@ import { browsePage } from "./tools/browsePage";
 import { generateImage } from "./tools/generateImage";
 import { checkImageLimit } from "./rateLimit";
 import { isQuotaError } from "./quota";
+import { recordImage } from "./stats";
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
@@ -35,7 +36,11 @@ const SYSTEM_PROMPT =
   "If asked to write code, put it in a fenced code block. Be concise and helpful.\n\n" +
   "IMPORTANT — links: always write URLs as markdown links, e.g. [github.com/rohanteja09](https://github.com/rohanteja09), " +
   "never as bare text. When you answer from web_search or browse_page results, cite your sources at the end as a short " +
-  "markdown list of links using the URLs from the tool results. Accurate, clickable sources matter for research.";
+  "markdown list of links using the URLs from the tool results. Accurate, clickable sources matter for research.\n\n" +
+  "IMPORTANT — structured data: whenever the answer is naturally a comparison or a list of items each with several " +
+  "attributes (e.g. \"compare X and Y\", specs, pros/cons, pricing tiers, a table of options), format it as a GFM " +
+  "markdown table (header row + |---| separator row) instead of prose or a bullet list — it renders as a real table " +
+  "in this UI and is much easier to scan.";
 
 interface ToolSpec {
   type: "function";
@@ -126,7 +131,7 @@ const ROUTER_PROMPT =
   "- none : anything else (greetings, chat, opinions, writing text, writing code, explanations)\n" +
   "Reply with only the single word.";
 
-async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"image" | "browse" | "search" | "none"> {
+export async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"image" | "browse" | "search" | "none"> {
   try {
     const result = (await env.AI.run(MODEL, {
       messages: [
@@ -145,11 +150,66 @@ async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"i
   }
 }
 
+// Streaming and Workers AI's function-calling (`tools`) don't mix cleanly —
+// tool-call JSON can't be usefully streamed token-by-token. So real streaming
+// is only attempted on the "none" route (the common plain-chat case, no tool
+// needed); anything that might call a tool falls back to the existing
+// non-streamed multi-round flow below, which already knows how to parse
+// tool_calls out of a complete response.
+export async function streamPlainReply(
+  env: CloudflareEnv,
+  history: { role: "user" | "assistant"; content: string }[]
+): Promise<ReadableStream<Uint8Array>> {
+  const messages: AiMessage[] = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-12)];
+  const upstream = (await env.AI.run(MODEL, { messages, max_tokens: 1024, stream: true })) as ReadableStream<Uint8Array>;
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const reader = upstream.getReader();
+
+  // Workers AI emits OpenAI-style SSE lines (`data: {"response":"..."}`,
+  // terminated by `data: [DONE]`). Re-wrapped into our own minimal
+  // `{ token }` shape so the wire format isn't tied to Workers AI's exact
+  // upstream shape, and so a final `{ done: true }` marker can be added.
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(payload) as { response?: string };
+              if (parsed.response) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: parsed.response })}\n\n`));
+              }
+            } catch {
+              // malformed/partial SSE fragment — skip it
+            }
+          }
+        }
+      } finally {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
+        controller.close();
+      }
+    },
+  });
+}
+
 export async function runAgent(
   env: CloudflareEnv,
   history: { role: "user" | "assistant"; content: string }[],
   visitor: string,
-  image?: { dataUrl: string; question: string }
+  image?: { dataUrl: string; question: string },
+  precomputedRoute?: "image" | "browse" | "search" | "none"
 ): Promise<AgentResult> {
   if (image) {
     const result = await env.AI.run(VISION_MODEL, {
@@ -173,7 +233,7 @@ export async function runAgent(
   ];
   const toolCalls: ToolCall[] = [];
   const lastUserMessage = history[history.length - 1]?.content ?? "";
-  const route = await routeMessage(env, lastUserMessage);
+  const route = precomputedRoute ?? (await routeMessage(env, lastUserMessage));
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const allowTools = route !== "none" && round < MAX_TOOL_ROUNDS - 1;
@@ -206,13 +266,15 @@ export async function runAgent(
       let tc: ToolCall;
 
       if (call.name === "web_search") {
-        output = await webSearch(args.query ?? "");
+        const outcome = await webSearch(args.query ?? "");
+        output = outcome.formatted;
         tc = {
           id: crypto.randomUUID(),
           kind: "search",
           label: `Searched the web for "${args.query}"`,
           detail: output.slice(0, 300),
           status: "done",
+          sources: outcome.results.map((r) => ({ title: r.title, url: r.url })).filter((s) => s.url),
         };
       } else if (call.name === "browse_page") {
         output = await browsePage(args.url ?? "");
@@ -237,6 +299,7 @@ export async function runAgent(
         } else {
           try {
             const dataUrl = await generateImage(env, args.prompt ?? "");
+            await recordImage(env.RATE_LIMIT_KV);
             output = "Image generated successfully and shown to the user.";
             tc = {
               id: crypto.randomUUID(),

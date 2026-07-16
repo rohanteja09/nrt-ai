@@ -1,7 +1,12 @@
-interface SearchResult {
+export interface SearchResult {
   title: string;
   snippet: string;
   url: string;
+}
+
+export interface WebSearchOutcome {
+  formatted: string;
+  results: SearchResult[];
 }
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
@@ -114,15 +119,15 @@ async function wikipedia(query: string): Promise<SearchResult[]> {
   }));
 }
 
-export async function webSearch(query: string): Promise<string> {
+export async function webSearch(query: string): Promise<WebSearchOutcome> {
   const providers = [ddgHtml, ddgLite, wikipedia];
   for (const provider of providers) {
     try {
       const results = await provider(query);
-      if (results.length > 0) return formatResults(results);
+      if (results.length > 0) return { formatted: formatResults(results), results };
     } catch {
       // try the next provider
     }
   }
-  return "No results found.";
+  return { formatted: "No results found.", results: [] };
 }

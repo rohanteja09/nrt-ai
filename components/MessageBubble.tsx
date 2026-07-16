@@ -24,7 +24,9 @@ export default function MessageBubble({
   const isUser = message.role === "user";
   // Markdown structure (fences, lists) breaks mid-animation, so only animate plain prose.
   const isPlainProse = !isUser && !/[`*#\[\|]/.test(message.text);
-  const shownText = useTypewriter(message.text, animateText && isPlainProse);
+  // Real-streamed messages are already arriving token-by-token — running the
+  // fake typewriter on top would have it chase a moving target.
+  const shownText = useTypewriter(message.text, animateText && isPlainProse && !message.streamed);
   const timeLabel = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
     : null;

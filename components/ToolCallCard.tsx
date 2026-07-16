@@ -3,6 +3,14 @@
 import { motion } from "framer-motion";
 import type { ToolCall } from "@/lib/types";
 
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 const ICON: Record<ToolCall["kind"], string> = {
   search: "\u{1F50D}",
   browse: "\u{1F310}",
@@ -111,10 +119,26 @@ export default function ToolCallCard({ call }: { call: ToolCall }) {
           </div>
         )}
 
-        {call.detail && (
+        {call.detail && !(call.sources && call.sources.length > 0) && (
           <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-500 dark:text-zinc-400">
             {call.detail}
           </p>
+        )}
+        {call.sources && call.sources.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {call.sources.map((s, i) => (
+              <a
+                key={i}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={s.title}
+                className="flex max-w-[160px] items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] text-cyan-700 hover:bg-cyan-500/15 dark:text-cyan-400"
+              >
+                <span className="truncate">{domainOf(s.url)}</span>
+              </a>
+            ))}
+          </div>
         )}
         {call.imageUrl && (
           <motion.img
