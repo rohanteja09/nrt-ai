@@ -188,8 +188,11 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Desktop: an in-flow collapsible column, always in the layout. */}
-      <div className={`pointer-events-auto hidden shrink-0 overflow-hidden transition-[width] duration-200 md:block ${open ? "w-64" : "w-0"}`}>
+      {/* Desktop: an in-flow collapsible column, always in the layout. Sticky
+          + its own viewport height so it stays put regardless of how tall
+          the chat content grows (long code blocks etc. can make the page
+          itself scroll — the sidebar shouldn't scroll away with it). */}
+      <div className={`pointer-events-auto sticky top-0 hidden h-screen shrink-0 overflow-hidden transition-[width] duration-200 md:block ${open ? "w-64" : "w-0"}`}>
         {open && panel}
       </div>
       {!open && (

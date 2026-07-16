@@ -482,7 +482,7 @@ export default function Chat() {
     slashQuery !== null ? SLASH_COMMANDS.filter((c) => c.cmd.slice(1).startsWith(slashQuery)) : [];
 
   return (
-    <div className="pointer-events-none relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4">
+    <div className="pointer-events-none relative mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4">
       {/* Announces the final text of each assistant reply to screen readers,
           without repeating on every typewriter/tool-status update. */}
       <div aria-live="polite" className="sr-only">
