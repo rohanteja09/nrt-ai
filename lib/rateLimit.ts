@@ -34,8 +34,21 @@ export async function checkChatLimit(kv: KVNamespace, visitor: string): Promise<
   return bump(kv, `chat:${visitor}:${today()}`, DAILY_CHAT_LIMIT);
 }
 
-export async function checkImageLimit(kv: KVNamespace, visitor: string): Promise<boolean> {
-  return bump(kv, `image:${visitor}:${today()}`, DAILY_IMAGE_LIMIT);
+// Split into a peek (read-only) and a commit (actually spends the slot),
+// instead of one atomic check-and-increment — image generation can fail
+// (content moderation, upstream errors), and a failed attempt shouldn't
+// cost the visitor part of their daily quota. Only call commitImageUsage
+// after generateImage() has actually succeeded.
+export async function peekImageAllowed(kv: KVNamespace, visitor: string): Promise<boolean> {
+  const usage = await getUsage(kv, visitor);
+  return usage.imagesLeft > 0;
+}
+
+export async function commitImageUsage(kv: KVNamespace, visitor: string): Promise<void> {
+  const key = `image:${visitor}:${today()}`;
+  const current = await kv.get(key);
+  const count = current ? parseInt(current, 10) : 0;
+  await kv.put(key, String(count + 1), { expirationTtl: 60 * 60 * 24 });
 }
 
 export async function getUsage(kv: KVNamespace, visitor: string): Promise<Usage> {

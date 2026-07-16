@@ -144,14 +144,28 @@ export default function ToolCallCard({ call }: { call: ToolCall }) {
           </div>
         )}
         {call.imageUrl && (
-          <motion.img
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            src={call.imageUrl}
-            alt={call.label}
-            className="mt-2 max-h-64 rounded-md border border-zinc-200 dark:border-zinc-800"
-          />
+          <div className="group relative mt-2 inline-block">
+            <motion.img
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              src={call.imageUrl}
+              alt={call.label}
+              className="max-h-64 rounded-md border border-zinc-200 dark:border-zinc-800"
+            />
+            <a
+              href={call.imageUrl}
+              download="nrt-ai-image.jpg"
+              title="Download image"
+              aria-label="Download image"
+              className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-zinc-900/80 px-2 py-1 text-[10px] font-medium text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-zinc-900 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 group-hover:opacity-100"
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2.5v7.5M4.5 7l3.5 3.5L11.5 7M3 13h10" />
+              </svg>
+              Download
+            </a>
+          </div>
         )}
       </div>
     </motion.div>

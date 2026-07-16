@@ -2,7 +2,7 @@ import type { ToolCall } from "./types";
 import { webSearch } from "./tools/webSearch";
 import { browsePage } from "./tools/browsePage";
 import { generateImage } from "./tools/generateImage";
-import { checkImageLimit } from "./rateLimit";
+import { commitImageUsage, peekImageAllowed } from "./rateLimit";
 import { isQuotaError } from "./quota";
 import { recordImage } from "./stats";
 import { addMemory, getMemories } from "./memory";
@@ -244,6 +244,17 @@ export async function streamPlainReply(
   });
 }
 
+// If the model retries a failed generate_image call with a reworded prompt
+// and the retry succeeds, drop the failed attempt from what's shown —
+// the visitor asked for one image and got one; the internal retry isn't
+// something they need to see, and it no longer costs them anything since
+// only the successful attempt spends a quota slot (see commitImageUsage).
+function finalizeToolCalls(toolCalls: ToolCall[]): ToolCall[] {
+  const hasSuccessfulImage = toolCalls.some((tc) => tc.kind === "image" && tc.imageUrl);
+  if (!hasSuccessfulImage) return toolCalls;
+  return toolCalls.filter((tc) => !(tc.kind === "image" && !tc.imageUrl));
+}
+
 export async function runAgent(
   env: CloudflareEnv,
   history: { role: "user" | "assistant"; content: string }[],
@@ -293,7 +304,12 @@ export async function runAgent(
 
     const rawCalls = allowTools ? result.tool_calls : undefined;
     if (!rawCalls || rawCalls.length === 0) {
-      return { text: result.response ?? "I'm not sure how to respond to that.", toolCalls, model: MODEL, route };
+      return {
+        text: result.response ?? "I'm not sure how to respond to that.",
+        toolCalls: finalizeToolCalls(toolCalls),
+        model: MODEL,
+        route,
+      };
     }
 
     const calls = rawCalls.map((c, i) => ({ ...c, id: `call_${round}_${i}` }));
@@ -339,7 +355,7 @@ export async function runAgent(
           status: "done",
         };
       } else if (call.name === "generate_image") {
-        const allowed = await checkImageLimit(env.RATE_LIMIT_KV, visitor);
+        const allowed = await peekImageAllowed(env.RATE_LIMIT_KV, visitor);
         if (!allowed) {
           output = "Image generation daily limit reached for this visitor. Try again tomorrow.";
           tc = {
@@ -352,6 +368,10 @@ export async function runAgent(
         } else {
           try {
             const dataUrl = await generateImage(env, args.prompt ?? "");
+            // Only spend the visitor's daily slot once generation actually
+            // succeeds — a failed attempt (content moderation, upstream
+            // error) shouldn't cost part of their quota.
+            await commitImageUsage(env.RATE_LIMIT_KV, visitor);
             await recordImage(env.RATE_LIMIT_KV);
             output = "Image generated successfully and shown to the user.";
             tc = {
@@ -404,7 +424,7 @@ export async function runAgent(
 
   return {
     text: "I ran into trouble completing that request after a few tool calls — try rephrasing it.",
-    toolCalls,
+    toolCalls: finalizeToolCalls(toolCalls),
     model: MODEL,
     route,
   };
