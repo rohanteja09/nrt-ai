@@ -7,6 +7,14 @@ import Logo from "./Logo";
 import { useTypewriter } from "@/lib/useTypewriter";
 import type { ChatMessage } from "@/lib/types";
 
+// Short, human labels for the raw Workers AI model IDs — an at-a-glance
+// transparency note about which model actually produced a given reply.
+function shortModelName(model: string): string {
+  if (model.includes("moondream")) return "Moondream 3.1";
+  if (model.includes("llama-3.3-70b")) return "Llama 3.3 70B";
+  return model.split("/").pop() ?? model;
+}
+
 export default function MessageBubble({
   message,
   animateText,
@@ -91,13 +99,15 @@ export default function MessageBubble({
           ) : (
             <Markdown text={message.text} />
           ))}
-        {timeLabel && (
+        {(timeLabel || message.model) && (
           <div
-            className={`mt-1 text-[10px] font-medium ${
+            className={`mt-1 flex items-center gap-1.5 text-[10px] font-medium ${
               isUser ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-400 dark:text-zinc-500"
             }`}
           >
-            {timeLabel}
+            {timeLabel && <span>{timeLabel}</span>}
+            {timeLabel && message.model && <span aria-hidden="true">&middot;</span>}
+            {message.model && <span title="Model that produced this reply">{shortModelName(message.model)}</span>}
           </div>
         )}
       </div>

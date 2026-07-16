@@ -5,12 +5,13 @@ import { generateImage } from "./tools/generateImage";
 import { checkImageLimit } from "./rateLimit";
 import { isQuotaError } from "./quota";
 import { recordImage } from "./stats";
+import { addMemory, getMemories } from "./memory";
 
-const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+export const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const VISION_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const MAX_TOOL_ROUNDS = 3;
 
-const SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT =
   "You are NRT AI, an AI assistant built by Rohan Teja Nallapaneni.\n\n" +
   "About your creator (share naturally when asked about him): Rohan Teja Nallapaneni is a Computer Science " +
   "student in the Department of Computing Technologies, School of Computing, at SRM Institute of Science and " +
@@ -20,19 +21,23 @@ const SYSTEM_PROMPT =
   "chat, web search, page browsing, image generation and analysis, and runnable code, running entirely on " +
   "Cloudflare's free tier) and LayoutIQ, a layout-plan compliance checker for Andhra Pradesh planning " +
   "regulations. His GitHub is github.com/rohanteja09.\n\n" +
-  "You have three tools available: web_search, browse_page, and generate_image. " +
+  "You have four tools available: web_search, browse_page, generate_image, and remember_fact. " +
   "The default behavior for EVERY message is to NOT call any tool and just answer in plain text. " +
   "Only call generate_image if the user's message explicitly contains a request to create, draw, generate, " +
   "or make an image, picture, photo, or artwork. A request to write text, describe something, or say something " +
   "is NOT a request for an image — never call generate_image for those. " +
   "Only call web_search if the question is about current events, live data, or facts you are genuinely unsure of. " +
   "Only call browse_page if the user gave you a specific URL. " +
+  "Only call remember_fact if the user explicitly asks you to remember something, or shares a durable fact about " +
+  "themselves worth recalling in later conversations (their name, profession, a stated preference) — not for " +
+  "throwaway details relevant only to the current message. " +
   "For greetings, small talk, opinions, jokes, or anything else — respond directly in plain text with no tool call.\n\n" +
   "Examples:\n" +
   "User: \"Say hello in 5 words\" -> plain text reply, no tool call, e.g. \"Hello! Great to meet you.\"\n" +
   "User: \"How are you?\" -> plain text reply, no tool call.\n" +
   "User: \"Generate an image of a sunset\" -> call generate_image with prompt \"a sunset\".\n" +
-  "User: \"What's the weather like today in Tokyo?\" -> call web_search.\n\n" +
+  "User: \"What's the weather like today in Tokyo?\" -> call web_search.\n" +
+  "User: \"Remember that I prefer Python over JavaScript\" -> call remember_fact with \"Prefers Python over JavaScript\".\n\n" +
   "If asked to write code, put it in a fenced code block. Be concise and helpful.\n\n" +
   "IMPORTANT — links: always write URLs as markdown links, e.g. [github.com/rohanteja09](https://github.com/rohanteja09), " +
   "never as bare text. When you answer from web_search or browse_page results, cite your sources at the end as a short " +
@@ -40,7 +45,17 @@ const SYSTEM_PROMPT =
   "IMPORTANT — structured data: whenever the answer is naturally a comparison or a list of items each with several " +
   "attributes (e.g. \"compare X and Y\", specs, pros/cons, pricing tiers, a table of options), format it as a GFM " +
   "markdown table (header row + |---| separator row) instead of prose or a bullet list — it renders as a real table " +
-  "in this UI and is much easier to scan.";
+  "in this UI and is much easier to scan.\n\n" +
+  "IMPORTANT — domain-sensitive questions: for medicine, law, and finance questions, share general, widely-known " +
+  "information but explicitly say you're not a licensed professional and the user should consult one for advice " +
+  "specific to their situation — don't assert expertise you don't have, and don't skip the caveat just because the " +
+  "question seems simple.";
+
+function buildSystemPrompt(memories: string[]): string {
+  if (memories.length === 0) return BASE_SYSTEM_PROMPT;
+  const recalled = memories.map((m) => `- ${m}`).join("\n");
+  return `${BASE_SYSTEM_PROMPT}\n\nThings this visitor has told you to remember from past conversations:\n${recalled}`;
+}
 
 interface ToolSpec {
   type: "function";
@@ -102,6 +117,23 @@ const TOOLS: ToolSpec[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "remember_fact",
+      description:
+        "Saves a short, durable fact about this visitor (name, profession, a stated preference) so it can be " +
+        "recalled in future conversations. Only call this when the user explicitly asks to be remembered, or " +
+        "shares something clearly meant to persist beyond the current message.",
+      parameters: {
+        type: "object",
+        properties: {
+          fact: { type: "string", description: "A short, specific fact, e.g. 'Name is Alex' or 'Prefers Python over JavaScript'" },
+        },
+        required: ["fact"],
+      },
+    },
+  },
 ];
 
 interface AiMessage {
@@ -118,6 +150,8 @@ interface AiMessage {
 export interface AgentResult {
   text: string;
   toolCalls: ToolCall[];
+  model: string;
+  route: Route | "image-analysis";
 }
 
 // Llama's tool-calling template derails on messages that don't need a tool
@@ -128,10 +162,13 @@ const ROUTER_PROMPT =
   "- image : they explicitly ask to generate/create/draw/make an image, picture, photo, or artwork\n" +
   "- browse : they give a specific URL to read or summarize\n" +
   "- search : they ask about current events, live data, or facts that require looking up the web\n" +
+  "- remember : they explicitly ask to be remembered, or state a durable fact about themselves meant to persist\n" +
   "- none : anything else (greetings, chat, opinions, writing text, writing code, explanations)\n" +
   "Reply with only the single word.";
 
-export async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<"image" | "browse" | "search" | "none"> {
+export type Route = "image" | "browse" | "search" | "remember" | "none";
+
+export async function routeMessage(env: CloudflareEnv, userMessage: string): Promise<Route> {
   try {
     const result = (await env.AI.run(MODEL, {
       messages: [
@@ -144,6 +181,7 @@ export async function routeMessage(env: CloudflareEnv, userMessage: string): Pro
     if (word.startsWith("image")) return "image";
     if (word.startsWith("browse")) return "browse";
     if (word.startsWith("search")) return "search";
+    if (word.startsWith("remember")) return "remember";
     return "none";
   } catch {
     return "none";
@@ -158,9 +196,11 @@ export async function routeMessage(env: CloudflareEnv, userMessage: string): Pro
 // tool_calls out of a complete response.
 export async function streamPlainReply(
   env: CloudflareEnv,
-  history: { role: "user" | "assistant"; content: string }[]
+  history: { role: "user" | "assistant"; content: string }[],
+  visitor: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const messages: AiMessage[] = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-12)];
+  const memories = await getMemories(env.RATE_LIMIT_KV, visitor);
+  const messages: AiMessage[] = [{ role: "system", content: buildSystemPrompt(memories) }, ...history.slice(-12)];
   const upstream = (await env.AI.run(MODEL, { messages, max_tokens: 1024, stream: true })) as ReadableStream<Uint8Array>;
 
   const decoder = new TextDecoder();
@@ -209,7 +249,7 @@ export async function runAgent(
   history: { role: "user" | "assistant"; content: string }[],
   visitor: string,
   image?: { dataUrl: string; question: string },
-  precomputedRoute?: "image" | "browse" | "search" | "none"
+  precomputedRoute?: Route
 ): Promise<AgentResult> {
   if (image) {
     const result = await env.AI.run(VISION_MODEL, {
@@ -224,11 +264,12 @@ export async function runAgent(
     const r = result as { result?: { answer?: string; caption?: string }; answer?: string; caption?: string };
     const text =
       r.result?.answer ?? r.result?.caption ?? r.answer ?? r.caption ?? "I couldn't analyze that image.";
-    return { text, toolCalls: [] };
+    return { text, toolCalls: [], model: VISION_MODEL, route: "image-analysis" };
   }
 
+  const memories = await getMemories(env.RATE_LIMIT_KV, visitor);
   const messages: AiMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(memories) },
     ...history.slice(-12),
   ];
   const toolCalls: ToolCall[] = [];
@@ -252,7 +293,7 @@ export async function runAgent(
 
     const rawCalls = allowTools ? result.tool_calls : undefined;
     if (!rawCalls || rawCalls.length === 0) {
-      return { text: result.response ?? "I'm not sure how to respond to that.", toolCalls };
+      return { text: result.response ?? "I'm not sure how to respond to that.", toolCalls, model: MODEL, route };
     }
 
     const calls = rawCalls.map((c, i) => ({ ...c, id: `call_${round}_${i}` }));
@@ -332,6 +373,16 @@ export async function runAgent(
             };
           }
         }
+      } else if (call.name === "remember_fact") {
+        const fact = args.fact ?? "";
+        await addMemory(env.RATE_LIMIT_KV, visitor, fact);
+        output = "Noted — I'll remember that in future conversations.";
+        tc = {
+          id: crypto.randomUUID(),
+          kind: "memory",
+          label: `Remembered: "${fact}"`,
+          status: "done",
+        };
       } else {
         output = "Unknown tool.";
         tc = {
@@ -354,5 +405,7 @@ export async function runAgent(
   return {
     text: "I ran into trouble completing that request after a few tool calls — try rephrasing it.",
     toolCalls,
+    model: MODEL,
+    route,
   };
 }

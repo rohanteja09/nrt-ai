@@ -18,6 +18,7 @@ import {
   SWITCH_CONVERSATION_EVENT,
 } from "@/lib/history";
 import { showToast } from "@/lib/toast";
+import { getDeviceId } from "@/lib/deviceId";
 
 const ACCENT_SWATCH: Record<Accent, string> = {
   blue: "#2563eb",
@@ -38,6 +39,8 @@ export default function SettingsButton() {
   const [accent, setAccent] = useState<Accent>("blue");
   const [motionPref, setMotionPref] = useState<boolean | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [memories, setMemories] = useState<string[]>([]);
+  const [confirmingClearMemory, setConfirmingClearMemory] = useState(false);
   // document.body only exists client-side — the portal below must wait for
   // mount, otherwise SSR crashes on `document is not defined`.
   const [mounted, setMounted] = useState(false);
@@ -54,6 +57,20 @@ export default function SettingsButton() {
     const t = setTimeout(() => setConfirmingClear(false), 3000);
     return () => clearTimeout(t);
   }, [confirmingClear]);
+
+  useEffect(() => {
+    if (!confirmingClearMemory) return;
+    const t = setTimeout(() => setConfirmingClearMemory(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmingClearMemory]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/memory", { headers: { "x-nrt-device": getDeviceId() } })
+      .then((r) => r.json() as Promise<{ memories?: string[] }>)
+      .then((d) => setMemories(d.memories ?? []))
+      .catch(() => {});
+  }, [open]);
 
   function pickAccent(next: Accent) {
     setAccent(next);
@@ -77,6 +94,17 @@ export default function SettingsButton() {
     setConfirmingClear(false);
     showToast("Chat history cleared");
     setOpen(false);
+  }
+
+  async function handleClearMemory() {
+    if (!confirmingClearMemory) {
+      setConfirmingClearMemory(true);
+      return;
+    }
+    await fetch("/api/memory", { method: "DELETE", headers: { "x-nrt-device": getDeviceId() } });
+    setMemories([]);
+    setConfirmingClearMemory(false);
+    showToast("Remembered facts cleared");
   }
 
   return (
@@ -165,6 +193,37 @@ export default function SettingsButton() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      What it remembers about you
+                    </p>
+                    {memories.length === 0 ? (
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                        Nothing yet — ask it to remember something and it&apos;ll show up here.
+                      </p>
+                    ) : (
+                      <ul className="mb-2 space-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+                        {memories.map((m, i) => (
+                          <li key={i} className="truncate" title={m}>
+                            &bull; {m}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {memories.length > 0 && (
+                      <button
+                        onClick={handleClearMemory}
+                        className={`mt-2 w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                          confirmingClearMemory
+                            ? "border-red-400 bg-red-50 text-red-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-400"
+                            : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                        }`}
+                      >
+                        {confirmingClearMemory ? "Click again to confirm" : "Clear remembered facts"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">

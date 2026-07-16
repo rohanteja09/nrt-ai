@@ -30,6 +30,7 @@ interface ChatApiResponse {
   error?: string;
   quotaExhausted?: boolean;
   usage?: Usage;
+  model?: string;
 }
 
 const SLASH_COMMANDS = [
@@ -341,9 +342,13 @@ export default function Chat() {
             // malformed usage header — non-fatal, usage bar just won't update this turn
           }
         }
+        const modelHeader = res.headers.get("x-nrt-model") ?? undefined;
 
         const replyId = crypto.randomUUID();
-        setMessages((m) => [...m, { id: replyId, role: "assistant", text: "", streamed: true, timestamp: now() }]);
+        setMessages((m) => [
+          ...m,
+          { id: replyId, role: "assistant", text: "", streamed: true, timestamp: now(), model: modelHeader },
+        ]);
         setLastAssistantId(replyId);
 
         const reader = res.body.getReader();
@@ -405,7 +410,7 @@ export default function Chat() {
 
       setMessages((m) => [
         ...m,
-        { id: replyId, role: "assistant", text: "", toolCalls: runningToolCalls, timestamp: now() },
+        { id: replyId, role: "assistant", text: "", toolCalls: runningToolCalls, timestamp: now(), model: data.model },
       ]);
 
       if (runningToolCalls.length === 0) {

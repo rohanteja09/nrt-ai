@@ -1,4 +1,4 @@
-export type ToolKind = "search" | "browse" | "image" | "code";
+export type ToolKind = "search" | "browse" | "image" | "code" | "memory";
 
 export interface ToolCall {
   id: string;
@@ -20,4 +20,6 @@ export interface ChatMessage {
   timestamp?: number;
   /** Populated via real token streaming — MessageBubble skips its fake typewriter reveal for these, since the text is already arriving incrementally. */
   streamed?: boolean;
+  /** Which underlying model produced this reply — shown as a small transparency note. */
+  model?: string;
 }

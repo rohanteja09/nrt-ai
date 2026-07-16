@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { runAgent, routeMessage, streamPlainReply } from "@/lib/agent";
+import { runAgent, routeMessage, streamPlainReply, MODEL } from "@/lib/agent";
 import { checkChatLimit, getUsage, visitorKey } from "@/lib/rateLimit";
 import { isQuotaError, markQuotaExhausted, QUOTA_MESSAGE } from "@/lib/quota";
 import { recordChat } from "@/lib/stats";
@@ -48,13 +48,14 @@ export async function POST(req: Request) {
 
   if (!image && route === "none") {
     try {
-      const stream = await streamPlainReply(env, messages);
+      const stream = await streamPlainReply(env, messages, visitor);
       const usage = await getUsage(env.RATE_LIMIT_KV, visitor);
       return new Response(stream, {
         headers: {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache",
           "x-nrt-usage": JSON.stringify(usage),
+          "x-nrt-model": MODEL,
         },
       });
     } catch (err) {

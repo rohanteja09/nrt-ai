@@ -16,6 +16,7 @@ const ICON: Record<ToolCall["kind"], string> = {
   browse: "\u{1F310}",
   image: "\u{1F3A8}",
   code: "\u{1F4BB}",
+  memory: "\u{1F9E0}",
 };
 
 const RING: Record<ToolCall["kind"], string> = {
@@ -23,6 +24,7 @@ const RING: Record<ToolCall["kind"], string> = {
   browse: "from-emerald-400/40 to-teal-500/40",
   image: "from-blue-500/40 to-zinc-900/40",
   code: "from-amber-400/40 to-orange-500/40",
+  memory: "from-violet-400/40 to-purple-500/40",
 };
 
 const ICON_COLOR: Record<ToolCall["kind"], string> = {
@@ -30,6 +32,7 @@ const ICON_COLOR: Record<ToolCall["kind"], string> = {
   browse: "text-emerald-500",
   image: "text-blue-500",
   code: "text-amber-500",
+  memory: "text-violet-500",
 };
 
 function ToolIcon({ call }: { call: ToolCall }) {
