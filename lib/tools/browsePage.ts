@@ -10,9 +10,10 @@ export async function browsePage(url: string): Promise<string> {
   try {
     res = await fetch(target, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; NRT-AI/1.0)" },
+      signal: AbortSignal.timeout(10000),
     });
   } catch {
-    return "Could not reach that URL.";
+    return "Could not reach that URL, or it took too long to respond.";
   }
   if (!res.ok) return `Failed to fetch page (status ${res.status}).`;
 

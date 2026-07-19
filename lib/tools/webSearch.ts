@@ -32,6 +32,7 @@ function decodeDdgHref(href: string | null): string {
 async function ddgHtml(query: string): Promise<SearchResult[]> {
   const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(6000),
   });
   // DDG returns 202 with a bot-challenge page instead of results; treat anything but 200 as a miss.
   if (res.status !== 200) return [];
@@ -69,6 +70,7 @@ async function ddgHtml(query: string): Promise<SearchResult[]> {
 async function ddgLite(query: string): Promise<SearchResult[]> {
   const res = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(6000),
   });
   if (!res.ok) return [];
 
@@ -106,7 +108,7 @@ async function wikipedia(query: string): Promise<SearchResult[]> {
   const url =
     "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*" +
     `&srlimit=5&srsearch=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(6000) });
   if (!res.ok) return [];
 
   const data = (await res.json()) as {
