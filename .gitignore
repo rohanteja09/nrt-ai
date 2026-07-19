@@ -37,7 +37,6 @@ yarn-error.log*
 .vercel
 
 # local tooling (not part of the project)
-.claude/
 .wrangler/
 .open-next/
 cloudflare-env.d.ts
